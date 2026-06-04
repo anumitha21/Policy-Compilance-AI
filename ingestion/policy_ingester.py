@@ -290,12 +290,20 @@ class PolicyIngester:
 
     def ingest_policy(
         self,
-        pdf_path: str
+        pdf_path: str,
+        force: bool = False
     ):
 
-        print(
-            f"Ingesting policy: {pdf_path}"
-        )
+        # Fix 3 — skip re-ingestion if DB already populated
+        if self.collection.count() > 0 and not force:
+            print(
+                f"[INGEST] Skipping — "
+                f"{self.collection.count()} chunks already in DB. "
+                f"Pass force=True to re-ingest."
+            )
+            return []
+
+        print(f"Ingesting policy: {pdf_path}")
 
         text = self.load_pdf(
             pdf_path

@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Policy Compliance AI — Contract Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --surface-2: #f0efe9;
+  --border: #e2e0d8;
+  --border-strong: #c8c5bc;
+  --text-primary: #1a1917;
+  --text-secondary: #6b6860;
+  --text-muted: #9b9890;
+  --accent: #1a1917;
+  --green: #2d6a4f;
+  --green-bg: #d8f3dc;
+  --red: #c1121f;
+  --red-bg: #ffe8e8;
+  --amber: #9c6f00;
+  --amber-bg: #fff3cd;
+  --blue: #1a5276;
+  --blue-bg: #d6eaf8;
+  --purple: #5b4fcf;
+  --purple-bg: #ede9ff;
+  --sidebar-w: 228px;
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  height: 100vh;
+  top: 0; left: 0;
+  z-index: 100;
+  padding: 0;
+}
+
+.sidebar-logo {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-icon {
+  width: 30px; height: 30px;
+  background: var(--text-primary);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: white;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.logo-text {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.logo-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.04em;
+}
+
+.sidebar-section {
+  padding: 16px 12px 8px;
+}
+
+.sidebar-section-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 8px;
+  margin-bottom: 4px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all .15s;
+  margin-bottom: 1px;
+  user-select: none;
+}
+
+.nav-item:hover { background: var(--surface-2); color: var(--text-primary); }
+.nav-item.active { background: var(--text-primary); color: white; }
+.nav-item .nav-icon { width: 16px; text-align: center; font-size: 13px; flex-shrink: 0; }
+.nav-item .badge-count {
+  margin-left: auto;
+  background: var(--red-bg);
+  color: var(--red);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 20px;
+  font-family: 'DM Mono', monospace;
+}
+.nav-item.active .badge-count { background: rgba(255,255,255,0.2); color: white; }
+
+.sidebar-bottom {
+  margin-top: auto;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.policy-status {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 11px;
+}
+
+.policy-status-label { color: var(--text-muted); margin-bottom: 4px; }
+.policy-status-name { font-weight: 500; color: var(--text-primary); font-size: 12px; }
+.policy-status-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); display: inline-block; margin-right: 5px;
+}
+
+/* ── MAIN ── */
+.main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+
+.file-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: 'DM Mono', monospace;
+  color: var(--text-secondary);
+}
+
+.file-chip i { font-size: 12px; color: var(--red); }
+
+.topbar-title { font-size: 15px; font-weight: 500; letter-spacing: -0.01em; }
+
+.topbar-actions { display: flex; gap: 8px; align-items: center; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: all .15s;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.btn:hover { background: var(--surface-2); border-color: var(--border-strong); }
+.btn-primary { background: var(--text-primary); color: white; border-color: var(--text-primary); }
+.btn-primary:hover { background: #2d2c29; }
+.btn i { font-size: 12px; }
+
+/* ── CONTENT ── */
+.content { padding: 24px 28px; flex: 1; }
+
+/* ── METRIC CARDS ── */
+.metrics-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.metric-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  transition: border-color .2s;
+}
+
+.metric-card:hover { border-color: var(--border-strong); }
+.metric-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; font-weight: 500; }
+.metric-value { font-size: 28px; font-weight: 300; letter-spacing: -0.03em; color: var(--text-primary); line-height: 1; }
+.metric-sub { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
+.metric-card.green .metric-value { color: var(--green); }
+.metric-card.red .metric-value { color: var(--red); }
+.metric-card.amber .metric-value { color: var(--amber); }
+.metric-trend {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10px; font-weight: 500;
+  padding: 2px 6px; border-radius: 20px;
+  margin-top: 5px;
+}
+.trend-red { background: var(--red-bg); color: var(--red); }
+.trend-green { background: var(--green-bg); color: var(--green); }
+
+/* ── SECTION HEADER ── */
+.section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.section-title { font-size: 12px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.07em; }
+
+/* ── CHARTS ROW ── */
+.charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+
+.chart-card-title { font-size: 12px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 16px; }
+.chart-wrap { position: relative; height: 160px; }
+
+/* ── TABLE ── */
+.table-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead th {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 11px 16px;
+  text-align: left;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background .12s;
+  cursor: pointer;
+}
+
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: var(--surface-2); }
+
+tbody td {
+  padding: 11px 16px;
+  font-size: 13px;
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.clause-name { font-weight: 400; color: var(--text-primary); }
+.clause-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; font-family: 'DM Mono', monospace; }
+
+/* ── BADGES ── */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: 20px;
+  font-size: 11px; font-weight: 500; white-space: nowrap;
+}
+.badge-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.badge.compliant { background: var(--green-bg); color: var(--green); }
+.badge.compliant .badge-dot { background: var(--green); }
+.badge.non-compliant { background: var(--red-bg); color: var(--red); }
+.badge.non-compliant .badge-dot { background: var(--red); }
+.badge.critical { background: var(--red-bg); color: var(--red); }
+.badge.major { background: var(--amber-bg); color: var(--amber); }
+.badge.moderate { background: var(--blue-bg); color: var(--blue); }
+.badge.rewrite { background: var(--blue-bg); color: var(--blue); }
+.badge.manual { background: var(--amber-bg); color: var(--amber); }
+.badge.minor { background: var(--surface-2); color: var(--text-secondary); }
+.score-chip {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.score-chip.high { color: var(--red); }
+.score-chip.mid { color: var(--amber); }
+
+/* ── DETAIL PANEL ── */
+.detail-overlay {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: 460px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  z-index: 200;
+  display: none;
+  flex-direction: column;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.06);
+}
+
+.detail-overlay.open { display: flex; }
+
+.detail-header {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; justify-content: space-between;
+}
+
+.detail-header-left { flex: 1; }
+.detail-clause-id { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+.detail-clause-title { font-size: 15px; font-weight: 500; letter-spacing: -0.01em; }
+
+.close-btn {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  margin-left: 12px;
+  transition: all .15s;
+}
+.close-btn:hover { background: var(--surface-2); color: var(--text-primary); }
+
+.detail-body { flex: 1; overflow-y: auto; padding: 20px; }
+
+.detail-section { margin-bottom: 20px; }
+.detail-section-label {
+  font-size: 10px; font-weight: 500; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;
+}
+
+.detail-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+
+.explanation-box {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  border-left: 3px solid var(--border-strong);
+}
+
+.violation-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.violation-item:last-child { border-bottom: none; }
+.violation-item i { color: var(--red); font-size: 11px; flex-shrink: 0; }
+
+.citation-box {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.citation-section { font-size: 11px; font-weight: 500; color: var(--text-secondary); font-family: 'DM Mono', monospace; margin-bottom: 5px; }
+.citation-excerpt { font-size: 12px; color: var(--text-secondary); line-height: 1.5; font-style: italic; }
+
+.rewrite-box {
+  background: #f0faf4;
+  border: 1px solid #b7e4c7;
+  border-radius: var(--radius-sm);
+  padding: 14px;
+}
+.rewrite-box pre {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #1b4332;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.confidence-bar-track {
+  width: 100%; height: 4px;
+  background: var(--border);
+  border-radius: 2px; overflow: hidden; margin-top: 6px;
+}
+.confidence-bar-fill {
+  height: 100%; border-radius: 2px;
+  background: var(--text-primary);
+  transition: width .6s ease;
+}
+.confidence-label {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--text-muted);
+}
+
+.manual-warning {
+  background: var(--amber-bg);
+  border: 1px solid #f0c040;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--amber);
+  display: flex; align-items: flex-start; gap: 8px;
+}
+
+/* ── UPLOAD VIEW ── */
+.upload-view {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 70vh; gap: 0;
+}
+
+.upload-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 48px;
+  width: 480px;
+  text-align: center;
+}
+
+.upload-icon {
+  width: 52px; height: 52px;
+  background: var(--surface-2);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  color: var(--text-secondary);
+  margin: 0 auto 20px;
+}
+
+.upload-title { font-size: 17px; font-weight: 500; margin-bottom: 6px; letter-spacing: -0.02em; }
+.upload-sub { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 24px; }
+
+.upload-zone {
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 28px;
+  cursor: pointer;
+  transition: all .2s;
+  margin-bottom: 16px;
+  background: var(--surface-2);
+}
+.upload-zone:hover { border-color: var(--text-primary); background: #f0efe9; }
+.upload-zone-text { font-size: 13px; color: var(--text-secondary); }
+.upload-zone-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+input[type=file] { display: none; }
+
+.progress-section { display: none; }
+.progress-section.visible { display: block; }
+.progress-track { width: 100%; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 12px 0 6px; }
+.progress-fill { height: 100%; background: var(--text-primary); border-radius: 2px; transition: width .4s; }
+.progress-label { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; }
+
+/* ── VIEWS ── */
+.view { display: none; }
+.view.active { display: block; }
+#upload-view.active { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(100vh - 57px); }
+
+/* ── PAGES ── */
+.page { display: none; }
+.page.active { display: block; }
+
+/* Empty state */
+.empty-state {
+  text-align: center; padding: 60px 20px; color: var(--text-muted);
+}
+.empty-state i { font-size: 32px; margin-bottom: 12px; display: block; }
+.empty-state p { font-size: 13px; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon"><i class="fa-solid fa-shield-halved"></i></div>
+    <div>
+      <div class="logo-text">ComplianceAI</div>
+      <div class="logo-sub">v1.0 · groq llama-3.3</div>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Workspace</div>
+    <div class="nav-item active" onclick="switchPage('dashboard')">
+      <span class="nav-icon"><i class="fa-regular fa-chart-bar"></i></span> Dashboard
+    </div>
+    <div class="nav-item" onclick="switchPage('review')">
+      <span class="nav-icon"><i class="fa-regular fa-file-lines"></i></span> Review contract
+    </div>
+    <div class="nav-item" onclick="switchPage('history')">
+      <span class="nav-icon"><i class="fa-regular fa-clock"></i></span> Past reviews
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Configuration</div>
+    <div class="nav-item" onclick="switchPage('policy')">
+      <span class="nav-icon"><i class="fa-regular fa-book"></i></span> Policy library
+    </div>
+    <div class="nav-item" onclick="switchPage('manual')">
+      <span class="nav-icon"><i class="fa-regular fa-flag"></i></span> Manual review
+      <span class="badge-count">0</span>
+    </div>
+  </div>
+
+  <div class="sidebar-bottom">
+    <div class="policy-status">
+      <div class="policy-status-label"><span class="policy-status-dot"></span>Active policy</div>
+      <div class="policy-status-name">company_policy.pdf</div>
+      <div style="font-size:10px;color:var(--text-muted);margin-top:2px">23 chunks · v1.0</div>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-title" id="topbar-title">Dashboard</div>
+      <div class="file-chip" id="file-chip" style="display:none">
+        <i class="fa-solid fa-file-pdf"></i>
+        <span id="file-chip-name">sample_contract.pdf</span>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn" onclick="exportReport()"><i class="fa-solid fa-download"></i> Export JSON</button>
+      <button class="btn btn-primary" onclick="switchPage('review')"><i class="fa-solid fa-plus"></i> New review</button>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- DASHBOARD PAGE -->
+    <div class="page active" id="page-dashboard">
+      <div id="dashboard-empty" class="empty-state" style="display:none">
+        <i class="fa-regular fa-folder-open"></i>
+        <p>No review loaded. Upload a contract to get started.</p>
+        <br>
+        <button class="btn btn-primary" onclick="switchPage('review')"><i class="fa-solid fa-upload"></i> Upload contract</button>
+      </div>
+      <div id="dashboard-content">
+        <!-- Metrics -->
+        <div class="metrics-row">
+          <div class="metric-card">
+            <div class="metric-label">Total clauses</div>
+            <div class="metric-value" id="m-total">10</div>
+            <div class="metric-sub">Reviewed in full</div>
+          </div>
+          <div class="metric-card green">
+            <div class="metric-label">Compliant</div>
+            <div class="metric-value" id="m-compliant">4</div>
+            <div class="metric-sub">40% pass rate</div>
+          </div>
+          <div class="metric-card red">
+            <div class="metric-label">Non-compliant</div>
+            <div class="metric-value" id="m-noncompliant">6</div>
+            <div class="metric-sub" id="m-nc-sub">3 critical · 3 major</div>
+          </div>
+          <div class="metric-card amber">
+            <div class="metric-label">Manual review</div>
+            <div class="metric-value" id="m-manual">0</div>
+            <div class="metric-sub">Flagged for human review</div>
+          </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-row">
+          <div class="chart-card">
+            <div class="chart-card-title">Risk distribution</div>
+            <div class="chart-wrap"><canvas id="riskChart"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-card-title">Violations by policy area</div>
+            <div class="chart-wrap"><canvas id="areaChart"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Clause table -->
+        <div class="section-header">
+          <div class="section-title">Clause results</div>
+          <div style="font-size:11px;color:var(--text-muted)">Click any row to inspect</div>
+        </div>
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Clause</th>
+                <th>Verdict</th>
+                <th>Risk level</th>
+                <th>Score</th>
+                <th>Policy area</th>
+                <th>Rewrite</th>
+                <th>Confidence</th>
+              </tr>
+            </thead>
+            <tbody id="clause-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- REVIEW PAGE -->
+    <div class="page" id="page-review">
+      <div class="upload-view">
+        <div class="upload-card">
+          <div class="upload-icon"><i class="fa-solid fa-file-contract"></i></div>
+          <div class="upload-title">Upload contract for review</div>
+          <div class="upload-sub">Clauses are extracted, PII masked, and reviewed against your active policy using the full agentic pipeline.</div>
+
+          <label for="file-input">
+            <div class="upload-zone" id="drop-zone">
+              <i class="fa-solid fa-cloud-arrow-up" style="font-size:20px;color:var(--text-muted);margin-bottom:8px;display:block"></i>
+              <div class="upload-zone-text" id="drop-label">Drop PDF here or click to browse</div>
+              <div class="upload-zone-sub">PDF only · max 10 MB</div>
+            </div>
+          </label>
+          <input type="file" id="file-input" accept=".pdf" onchange="handleFileSelect(this)">
+
+          <button class="btn btn-primary" id="run-btn" style="width:100%;justify-content:center;opacity:.4;pointer-events:none" onclick="runReview()">
+            <i class="fa-solid fa-bolt"></i> Run compliance review
+          </button>
+
+          <div class="progress-section" id="progress-section" style="margin-top:16px">
+            <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+            <div class="progress-label">
+              <span id="progress-label">Initialising pipeline...</span>
+              <span id="progress-pct">0%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HISTORY PAGE -->
+    <div class="page" id="page-history">
+      <div class="empty-state" style="margin-top:80px">
+        <i class="fa-regular fa-clock"></i>
+        <p>Past review history will appear here.<br>Reviews are stored per session.</p>
+      </div>
+    </div>
+
+    <!-- POLICY PAGE -->
+    <div class="page" id="page-policy">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;max-width:520px">
+        <div class="section-title" style="margin-bottom:12px">Active policy document</div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface-2);border-radius:var(--radius-sm)">
+          <i class="fa-solid fa-file-pdf" style="color:var(--red);font-size:18px"></i>
+          <div>
+            <div style="font-weight:500;font-size:13px">company_policy.pdf</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">23 chunks · Ingested · v1.0</div>
+          </div>
+          <span class="badge compliant" style="margin-left:auto">Active</span>
+        </div>
+        <div style="margin-top:12px;font-size:12px;color:var(--text-muted)">To update the policy, re-run the ingestion pipeline with <span style="font-family:'DM Mono',monospace;background:var(--surface-2);padding:1px 5px;border-radius:3px">--force-ingest</span></div>
+      </div>
+    </div>
+
+    <!-- MANUAL REVIEW PAGE -->
+    <div class="page" id="page-manual">
+      <div class="empty-state" style="margin-top:80px" id="manual-empty">
+        <i class="fa-regular fa-circle-check" style="color:var(--green)"></i>
+        <p>No clauses flagged for manual review.<br>All rewrites passed validation.</p>
+      </div>
+      <div id="manual-list" style="display:none"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- DETAIL PANEL -->
+<div class="detail-overlay" id="detail-panel">
+  <div class="detail-header">
+    <div class="detail-header-left">
+      <div class="detail-clause-id" id="dp-id">CLAUSE_3</div>
+      <div class="detail-clause-title" id="dp-title">Termination</div>
+    </div>
+    <button class="close-btn" onclick="closeDetail()"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="detail-body" id="dp-body"></div>
+</div>
+
+<script>
+const DATA = [
+  {
+    clause_id:"CLAUSE_1",title:"Engagement",
+    compliance_verdict:"compliant",
+    compliance_explanation:"The clause outlines engagement terms without contradicting any policy sections.",
+    risk_score:null,risk_level:null,risk_explanation:null,
+    violated_sections:[],citations:[],
+    confidence_score:0.95,suggested_rewrite:null,
+    manual_review_required:false,failed_rewrites:[],policy_area:"—"
+  },
+  {
+    clause_id:"CLAUSE_2",title:"Payment",
+    compliance_verdict:"compliant",
+    compliance_explanation:"Payment schedule and dispute resolution match policy sections 4.1 and 4.2 exactly.",
+    risk_score:null,risk_level:null,risk_explanation:null,
+    violated_sections:[],
+    citations:[
+      {section:"4.1 Payment Schedule",excerpt:"All invoices must be paid within thirty (30) days of the invoice date."},
+      {section:"4.2 Dispute Resolution for Invoices",excerpt:"Any invoice dispute must be raised in writing within ten (10) days of receipt."}
+    ],
+    confidence_score:0.95,suggested_rewrite:null,
+    manual_review_required:false,failed_rewrites:[],policy_area:"Payment"
+  },
+  {
+    clause_id:"CLAUSE_3",title:"Termination",
+    compliance_verdict:"non_compliant",
+    compliance_explanation:"The clause allows immediate termination without any notice period, directly violating the mandatory 30-day written notice requirement under Section 1.1.",
+    risk_score:7,risk_level:"major",
+    risk_explanation:"Removing the notice period creates significant contractual liability and removes a mandatory protection.",
+    violated_sections:["1.1 Notice Period","1.3 Termination for Cause"],
+    citations:[
+      {section:"1.1 Notice Period",excerpt:"Either party must provide a minimum of thirty (30) days written notice prior to termination."},
+      {section:"1.3 Termination for Cause",excerpt:"The non-breaching party must issue a written cure notice allowing fourteen (14) days to remedy the breach."}
+    ],
+    confidence_score:0.99,
+    suggested_rewrite:"Clause 3 — Termination\nEither party may terminate this Agreement upon providing a minimum of thirty (30) days written notice, except in cases of material breach wherein the non-breaching party must first issue a written cure notice allowing the breaching party fourteen (14) days to remedy the breach before termination takes effect. No compensation shall be owed for early termination.",
+    manual_review_required:false,failed_rewrites:[],policy_area:"Termination"
+  },
+  {
+    clause_id:"CLAUSE_4",title:"Confidentiality",
+    compliance_verdict:"non_compliant",
+    compliance_explanation:"The clause sets a one-year confidentiality period, which is less than the three-year minimum required by Section 3.3.",
+    risk_score:7,risk_level:"major",
+    risk_explanation:"Shortened confidentiality period exposes the company to data leakage risk after year one.",
+    violated_sections:["3.3 Confidentiality Period"],
+    citations:[
+      {section:"3.3 Confidentiality Period",excerpt:"Confidentiality obligations shall remain in force for a period of no less than three (3) years following termination."}
+    ],
+    confidence_score:0.98,
+    suggested_rewrite:"Clause 4 — Confidentiality\nEach party agrees to protect the other party's confidential information with no less than reasonable care. Confidential information shall not be disclosed to any third party without prior written consent. These obligations shall remain in force for a period of no less than three (3) years following the termination or expiration of this Agreement.",
+    manual_review_required:false,failed_rewrites:[],policy_area:"Confidentiality"
+  },
+  {
+    clause_id:"CLAUSE_5",title:"Liability",
+    compliance_verdict:"non_compliant",
+    compliance_explanation:"The clause states Acme's liability shall be unlimited, which directly removes the mandatory liability cap required by Section 2.1.",
+    risk_score:10,risk_level:"critical",
+    risk_explanation:"Unlimited liability creates major legal and financial exposure, removing a mandatory protection from the agreement.",
+    violated_sections:["2.1 Liability Cap"],
+    citations:[
+      {section:"2.1 Liability Cap",excerpt:"The total liability of either party shall not exceed the total fees paid or payable in the twelve (12) months preceding the event giving rise to the claim."}
+    ],
+    confidence_score:0.99,
+    suggested_rewrite:"Clause 5 — Liability\nIn no event shall either party be liable for indirect, incidental, or consequential damages including loss of profits or business interruption. The total liability of Acme Technologies Inc. under this Agreement shall not exceed the total fees paid or payable in the twelve (12) months preceding the event giving rise to the claim.",
+    manual_review_required:false,failed_rewrites:[],policy_area:"Liability"
+  },
+  {
+    clause_id:"CLAUSE_6",title:"Indemnification",
+    compliance_verdict:"non_compliant",
+    compliance_explanation:"The clause imposes one-sided indemnification on Globex only, violating the mutual indemnification requirement. It also fails to exclude consequential damages.",
+    risk_score:10,risk_level:"critical",
+    risk_explanation:"One-sided indemnification removes a mandatory protection and creates critical legal exposure for one party.",
+    violated_sections:["2.3 Indemnification","2.4 Mutual Indemnification Requirement","2.2 Exclusion of Consequential Damages"],
+    citations:[
+      {section:"2.4 Mutual Indemnification",excerpt:"Indemnification obligations must be mutual. No agreement shall impose one-sided obligations solely on one party."},
+      {section:"2.2 Exclusion of Consequential Damages",excerpt:"Neither party shall be liable for indirect, incidental, special, or consequential damages including loss of profits or loss of data."}
+    ],
+    confidence_score:0.92,
+    suggested_rewrite:"Clause 6 — Indemnification\nEach party shall indemnify, defend, and hold harmless the other party from any third-party claims arising out of that party's gross negligence or willful misconduct. Notwithstanding the foregoing, neither party shall be liable for indirect, incidental, special, or consequential damages, including loss of profits or business interruption, regardless of whether such damages were foreseeable. These indemnification obligations shall survive termination of this Agreement.",
+    manual_review_required:false,failed_rewrites:[],policy_area:"Indemnification"
+  },
+  {
+    clause_id:"CLAUSE_7",title:"Intellectual Property",
+    compliance_verdict:"non_compliant",
+    compliance_explanation:"The clause grants Acme sole ownership of all developed IP regardless of whether it was created specifically for Globex, violating Section 5.2.",
+    risk_score:10,risk_level:"critical",
+    risk_explanation:"Vendor retaining ownership of client-specific paid work is a critical IP violation with significant business impact.",
+    violated_sections:["5.2 Ownership of Developed Works"],
+    citations:[
+      {section:"5.2 Ownership of Developed Works",excerpt:"Intellectual property developed by a vendor specifically for the company under a paid engagement shall be owned by the company upon full payment."}
+    ],
+    confidence_score:0.90,
+    suggested_rewrite:"Clause 7 — Intellectual Property\nAll intellectual property developed by Acme Technologies Inc. specifically for Globex during the term of this Agreement shall be owned by Globex upon full payment, unless otherwise agreed in writing. IP developed not specifically for Globex shall remain Acme's property. Where IP is not transferred, Acme grants Globex a non-exclusive, non-transferable, royalty-free license to use the developed work solely for the purpose described in this Agreement.",
+    manual_review_required:false,failed_rewrites:[],policy_area:"Intellectual Property"
+  },
+  {
+    clause_id:"CLAUSE_8",title:"Dispute Resolution",
+    compliance_verdict:"non_compliant",
+    compliance_explanation:"The clause routes disputes directly to litigation, bypassing the mandatory mediation step required by Section 6.2 and the AAA arbitration requirement of Section 6.3.",
+    risk_score:7,risk_level:"major",
+    risk_explanation:"Skipping mandatory mediation and arbitration violates required dispute resolution process and may invalidate the dispute clause.",
+    violated_sections:["6.2 Mandatory Mediation","6.3 Arbitration"],
+    citations:[
+      {section:"6.2 Mandatory Mediation",excerpt:"Prior to initiating any arbitration or litigation, the parties must attempt to resolve the dispute through good-faith mediation for not less than thirty (30) days."},
+      {section:"6.3 Arbitration",excerpt:"If mediation fails, disputes shall be resolved through binding arbitration under the rules of the American Arbitration Association."}
+    ],
+    confidence_score:0.98,
+    suggested_rewrite:"Clause 8 — Dispute Resolution\nAny disputes arising under this Agreement shall be resolved as follows: (1) the parties shall attempt to resolve the dispute through good-faith mediation for a period of not less than thirty (30) days; and (2) if mediation fails, the dispute shall be resolved through binding arbitration under the rules of the American Arbitration Association, conducted in English in New York, New York. Both parties expressly waive the right to a jury trial.",
+    manual_review_required:false,failed_rewrites:[],policy_area:"Dispute Resolution"
+  },
+  {
+    clause_id:"CLAUSE_9",title:"Governing Law",
+    compliance_verdict:"compliant",
+    compliance_explanation:"The clause specifies Delaware law, fully matching the governing law requirement in Section 6.1.",
+    risk_score:null,risk_level:null,risk_explanation:null,
+    violated_sections:[],
+    citations:[{section:"6.1 Governing Law",excerpt:"All agreements shall be governed by and construed in accordance with the laws of the State of Delaware, United States."}],
+    confidence_score:0.99,suggested_rewrite:null,
+    manual_review_required:false,failed_rewrites:[],policy_area:"Governing Law"
+  },
+  {
+    clause_id:"CLAUSE_10",title:"Entire Agreement",
+    compliance_verdict:"compliant",
+    compliance_explanation:"Standard boilerplate clause. Does not contradict any policy requirement.",
+    risk_score:null,risk_level:null,risk_explanation:null,
+    violated_sections:[],citations:[],
+    confidence_score:0.95,suggested_rewrite:null,
+    manual_review_required:false,failed_rewrites:[],policy_area:"—"
+  }
+];
+
+function buildDashboard() {
+  const total = DATA.length;
+  const compliant = DATA.filter(d => d.compliance_verdict === 'compliant').length;
+  const nc = DATA.filter(d => d.compliance_verdict === 'non_compliant').length;
+  const manual = DATA.filter(d => d.manual_review_required).length;
+  const critical = DATA.filter(d => d.risk_level === 'critical').length;
+  const major = DATA.filter(d => d.risk_level === 'major').length;
+
+  document.getElementById('m-total').textContent = total;
+  document.getElementById('m-compliant').textContent = compliant;
+  document.getElementById('m-noncompliant').textContent = nc;
+  document.getElementById('m-nc-sub').textContent = `${critical} critical · ${major} major`;
+  document.getElementById('m-manual').textContent = manual;
+  document.getElementById('file-chip').style.display = 'flex';
+
+  buildCharts(critical, major);
+  buildTable();
+}
+
+function buildCharts(critical, major) {
+  const moderate = DATA.filter(d => d.risk_level === 'moderate').length;
+  const minor = DATA.filter(d => d.risk_level === 'minor').length;
+
+  const riskCtx = document.getElementById('riskChart').getContext('2d');
+  new Chart(riskCtx, {
+    type: 'bar',
+    data: {
+      labels: ['Critical', 'Major', 'Moderate', 'Minor'],
+      datasets: [{
+        data: [critical, major, moderate, minor],
+        backgroundColor: ['#c1121f','#9c6f00','#1a5276','#2d6a4f'],
+        borderRadius: 4, borderSkipped: false
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11, family: "'DM Mono'" }, color: '#9b9890' }, border: { display: false } },
+        y: { grid: { display: false }, ticks: { font: { size: 12, family: "'DM Sans'" }, color: '#6b6860' }, border: { display: false } }
+      }
+    }
+  });
+
+  const areas = {};
+  DATA.filter(d => d.compliance_verdict === 'non_compliant').forEach(d => {
+    const a = d.policy_area;
+    if (a && a !== '—') areas[a] = (areas[a] || 0) + 1;
+  });
+
+  const areaCtx = document.getElementById('areaChart').getContext('2d');
+  new Chart(areaCtx, {
+    type: 'bar',
+    data: {
+      labels: Object.keys(areas),
+      datasets: [{
+        data: Object.values(areas),
+        backgroundColor: '#5b4fcf',
+        borderRadius: 4, borderSkipped: false
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11, family: "'DM Mono'" }, color: '#9b9890' }, border: { display: false } },
+        y: { grid: { display: false }, ticks: { font: { size: 11, family: "'DM Sans'" }, color: '#6b6860' }, border: { display: false } }
+      }
+    }
+  });
+}
+
+function buildTable() {
+  const tbody = document.getElementById('clause-tbody');
+  tbody.innerHTML = '';
+  DATA.forEach((d, i) => {
+    const isNC = d.compliance_verdict === 'non_compliant';
+    const verdictBadge = isNC
+      ? `<span class="badge non-compliant"><span class="badge-dot"></span>Non-compliant</span>`
+      : `<span class="badge compliant"><span class="badge-dot"></span>Compliant</span>`;
+
+    const riskBadge = d.risk_level
+      ? `<span class="badge ${d.risk_level}">${d.risk_level.charAt(0).toUpperCase()+d.risk_level.slice(1)}</span>` : '—';
+
+    const scoreChip = d.risk_score
+      ? `<span class="score-chip ${d.risk_score >= 9 ? 'high' : 'mid'}">${d.risk_score}/10</span>` : '—';
+
+    let rewriteBadge = '—';
+    if (d.manual_review_required) rewriteBadge = `<span class="badge manual">Manual review</span>`;
+    else if (d.suggested_rewrite) rewriteBadge = `<span class="badge rewrite">Ready</span>`;
+
+    const conf = Math.round(d.confidence_score * 100);
+
+    const tr = document.createElement('tr');
+    tr.onclick = () => openDetail(i);
+    tr.innerHTML = `
+      <td>
+        <div class="clause-name">${d.title}</div>
+        <div class="clause-sub">${d.clause_id}</div>
+      </td>
+      <td>${verdictBadge}</td>
+      <td>${riskBadge}</td>
+      <td>${scoreChip}</td>
+      <td style="color:var(--text-secondary);font-size:12px">${d.policy_area}</td>
+      <td>${rewriteBadge}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden;min-width:50px">
+            <div style="height:100%;width:${conf}%;background:${conf>=90?'var(--green)':'var(--amber)'};border-radius:2px"></div>
+          </div>
+          <span style="font-size:11px;font-family:'DM Mono',monospace;color:var(--text-muted)">${conf}%</span>
+        </div>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function openDetail(idx) {
+  const d = DATA[idx];
+  document.getElementById('dp-id').textContent = d.clause_id;
+  document.getElementById('dp-title').textContent = d.title;
+
+  const body = document.getElementById('dp-body');
+  const isNC = d.compliance_verdict === 'non_compliant';
+  const conf = Math.round(d.confidence_score * 100);
+
+  let html = `<div class="detail-badges">`;
+  html += isNC
+    ? `<span class="badge non-compliant"><span class="badge-dot"></span>Non-compliant</span>`
+    : `<span class="badge compliant"><span class="badge-dot"></span>Compliant</span>`;
+  if (d.risk_level) html += `<span class="badge ${d.risk_level}">${d.risk_level.charAt(0).toUpperCase()+d.risk_level.slice(1)} · ${d.risk_score}/10</span>`;
+  html += `</div>`;
+
+  html += `<div class="detail-section">
+    <div class="detail-section-label">Assessment</div>
+    <div class="explanation-box">${d.compliance_explanation}</div>
+  </div>`;
+
+  if (d.risk_explanation) {
+    html += `<div class="detail-section">
+      <div class="detail-section-label">Risk explanation</div>
+      <div class="explanation-box" style="border-left-color:var(--red)">${d.risk_explanation}</div>
+    </div>`;
+  }
+
+  if (d.violated_sections.length) {
+    html += `<div class="detail-section">
+      <div class="detail-section-label">Violated sections</div>`;
+    d.violated_sections.forEach(s => {
+      html += `<div class="violation-item"><i class="fa-solid fa-circle-xmark"></i>${s}</div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (d.citations.length) {
+    html += `<div class="detail-section">
+      <div class="detail-section-label">Policy citations</div>`;
+    d.citations.forEach(c => {
+      html += `<div class="citation-box">
+        <div class="citation-section">${c.section}</div>
+        <div class="citation-excerpt">"${c.excerpt}"</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (d.suggested_rewrite) {
+    html += `<div class="detail-section">
+      <div class="detail-section-label">Suggested rewrite <span style="font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0">— recommendation only</span></div>
+      <div class="rewrite-box"><pre>${d.suggested_rewrite}</pre></div>
+    </div>`;
+  }
+
+  if (d.manual_review_required) {
+    html += `<div class="detail-section">
+      <div class="manual-warning">
+        <i class="fa-solid fa-triangle-exclamation" style="margin-top:1px"></i>
+        <div>This clause requires manual legal review. Automated rewrite was unsuccessful after two attempts.</div>
+      </div>
+    </div>`;
+  }
+
+  html += `<div class="detail-section">
+    <div class="detail-section-label">Confidence</div>
+    <div class="confidence-label"><span>${conf}% confidence</span></div>
+    <div class="confidence-bar-track">
+      <div class="confidence-bar-fill" style="width:${conf}%"></div>
+    </div>
+  </div>`;
+
+  body.innerHTML = html;
+  document.getElementById('detail-panel').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('open');
+}
+
+function switchPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+  const titles = {dashboard:'Dashboard',review:'Review contract',history:'Past reviews',policy:'Policy library',manual:'Manual review queue'};
+  document.getElementById('topbar-title').textContent = titles[page] || 'Dashboard';
+
+  document.getElementById('page-' + page).classList.add('active');
+  closeDetail();
+
+  const navMap = {dashboard:0,review:1,history:2,policy:3,manual:4};
+  const items = document.querySelectorAll('.nav-item');
+  if (navMap[page] !== undefined) items[navMap[page]].classList.add('active');
+}
+
+function handleFileSelect(input) {
+  if (input.files.length) {
+    const name = input.files[0].name;
+    document.getElementById('drop-label').textContent = name;
+    document.getElementById('file-chip-name').textContent = name;
+    const btn = document.getElementById('run-btn');
+    btn.style.opacity = '1';
+    btn.style.pointerEvents = 'auto';
+  }
+}
+
+function runReview() {
+  const prog = document.getElementById('progress-section');
+  const fill = document.getElementById('progress-fill');
+  const label = document.getElementById('progress-label');
+  const pct = document.getElementById('progress-pct');
+  prog.classList.add('visible');
+
+  const steps = [
+    [10,'Parsing contract PDF...'],
+    [20,'Masking PII...'],
+    [30,'Running hybrid retrieval...'],
+    [45,'Parent-child expansion...'],
+    [55,'Extracting evidence...'],
+    [65,'Running compliance agent...'],
+    [75,'Assessing risk...'],
+    [85,'Generating rewrites...'],
+    [95,'Validating rewrites...'],
+    [100,'Review complete']
+  ];
+
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= steps.length) {
+      clearInterval(interval);
+      setTimeout(() => {
+        switchPage('dashboard');
+        buildDashboard();
+      }, 400);
+      return;
+    }
+    fill.style.width = steps[i][0] + '%';
+    label.textContent = steps[i][1];
+    pct.textContent = steps[i][0] + '%';
+    i++;
+  }, 350);
+}
+
+function exportReport() {
+  const blob = new Blob([JSON.stringify(DATA, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'compliance_report.json';
+  a.click();
+}
+
+buildDashboard();
+</script>
+</body>
+</html>

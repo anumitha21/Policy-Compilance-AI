@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComplianceAI — Contract Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#f5f4f0; --surface:#fff; --surface-2:#f0efe9;
+  --border:#e2e0d8; --border-strong:#c8c5bc;
+  --text-primary:#1a1917; --text-secondary:#6b6860; --text-muted:#9b9890;
+  --green:#2d6a4f; --green-bg:#d8f3dc;
+  --red:#c1121f;   --red-bg:#ffe8e8;
+  --amber:#9c6f00; --amber-bg:#fff3cd;
+  --blue:#1a5276;  --blue-bg:#d6eaf8;
+  --purple:#5b4fcf;
+  --sidebar-w:228px; --radius:10px; --radius-sm:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text-primary);
+     font-size:14px;line-height:1.5;display:flex;min-height:100vh}
+
+/* ── SIDEBAR ── */
+.sidebar{width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;position:fixed;height:100vh;top:0;left:0;z-index:100}
+.sidebar-logo{padding:20px 20px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px}
+.logo-icon{width:30px;height:30px;background:var(--text-primary);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;color:white;font-size:13px;flex-shrink:0}
+.logo-text{font-size:14px;font-weight:500;letter-spacing:-0.02em}
+.logo-sub{font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;letter-spacing:.04em}
+.sidebar-section{padding:16px 12px 8px}
+.sidebar-section-label{font-size:10px;font-weight:500;color:var(--text-muted);
+  letter-spacing:.08em;text-transform:uppercase;padding:0 8px;margin-bottom:4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--radius-sm);
+  font-size:13px;color:var(--text-secondary);cursor:pointer;transition:all .15s;
+  margin-bottom:1px;user-select:none}
+.nav-item:hover{background:var(--surface-2);color:var(--text-primary)}
+.nav-item.active{background:var(--text-primary);color:white}
+.nav-item .nav-icon{width:16px;text-align:center;font-size:13px;flex-shrink:0}
+.nav-item .badge-count{margin-left:auto;background:var(--red-bg);color:var(--red);
+  font-size:10px;font-weight:500;padding:1px 6px;border-radius:20px;
+  font-family:'DM Mono',monospace;display:none}
+.nav-item .badge-count.show{display:inline-block}
+.nav-item.active .badge-count{background:rgba(255,255,255,.2);color:white}
+.sidebar-bottom{margin-top:auto;padding:12px;border-top:1px solid var(--border)}
+.policy-status{background:var(--surface-2);border-radius:var(--radius-sm);padding:10px 12px;font-size:11px}
+.policy-status-label{color:var(--text-muted);margin-bottom:4px}
+.policy-status-name{font-weight:500;color:var(--text-primary);font-size:12px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.policy-status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);
+  display:inline-block;margin-right:5px}
+.policy-status-dot.grey{background:var(--text-muted)}
+
+/* ── MAIN ── */
+.main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 28px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:50}
+.topbar-left{display:flex;align-items:center;gap:12px}
+.file-chip{display:none;align-items:center;gap:7px;background:var(--surface-2);
+  border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 10px;
+  font-size:12px;font-family:'DM Mono',monospace;color:var(--text-secondary)}
+.file-chip i{font-size:12px;color:var(--red)}
+.file-chip.show{display:flex}
+.topbar-title{font-size:15px;font-weight:500;letter-spacing:-0.01em}
+.topbar-actions{display:flex;gap:8px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
+  border-radius:var(--radius-sm);font-size:13px;font-family:'DM Sans',sans-serif;
+  cursor:pointer;transition:all .15s;border:1px solid var(--border);
+  background:var(--surface);color:var(--text-primary);font-weight:400;white-space:nowrap}
+.btn:hover{background:var(--surface-2);border-color:var(--border-strong)}
+.btn-primary{background:var(--text-primary);color:white;border-color:var(--text-primary)}
+.btn-primary:hover{background:#2d2c29}
+.btn:disabled{opacity:.4;pointer-events:none}
+.btn i{font-size:12px}
+
+/* ── CONTENT ── */
+.content{padding:24px 28px;flex:1}
+.page{display:none}
+.page.active{display:block}
+
+/* ── METRICS ── */
+.metrics-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.metric-card{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:16px 18px;transition:border-color .2s}
+.metric-card:hover{border-color:var(--border-strong)}
+.metric-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;
+  letter-spacing:.06em;margin-bottom:8px;font-weight:500}
+.metric-value{font-size:28px;font-weight:300;letter-spacing:-0.03em;
+  color:var(--text-primary);line-height:1}
+.metric-sub{font-size:11px;color:var(--text-muted);margin-top:5px}
+.metric-card.green .metric-value{color:var(--green)}
+.metric-card.red   .metric-value{color:var(--red)}
+.metric-card.amber .metric-value{color:var(--amber)}
+
+/* ── CHARTS ── */
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}
+.chart-card{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:18px 20px}
+.chart-card-title{font-size:12px;font-weight:500;color:var(--text-secondary);
+  text-transform:uppercase;letter-spacing:.07em;margin-bottom:16px}
+.chart-wrap{position:relative;height:160px}
+
+/* ── TABLE ── */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.section-title{font-size:12px;font-weight:500;color:var(--text-secondary);
+  text-transform:uppercase;letter-spacing:.07em}
+.table-card{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);overflow:hidden;margin-bottom:24px}
+table{width:100%;border-collapse:collapse}
+thead th{font-size:10px;font-weight:500;color:var(--text-muted);text-transform:uppercase;
+  letter-spacing:.07em;padding:11px 16px;text-align:left;background:var(--surface-2);
+  border-bottom:1px solid var(--border);white-space:nowrap}
+tbody tr{border-bottom:1px solid var(--border);transition:background .12s;cursor:pointer}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:var(--surface-2)}
+tbody td{padding:11px 16px;font-size:13px;color:var(--text-primary);vertical-align:middle}
+.clause-name{font-weight:400;color:var(--text-primary)}
+.clause-sub{font-size:11px;color:var(--text-muted);margin-top:1px;font-family:'DM Mono',monospace}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;
+  border-radius:20px;font-size:11px;font-weight:500;white-space:nowrap}
+.badge-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.badge.compliant{background:var(--green-bg);color:var(--green)}
+.badge.compliant .badge-dot{background:var(--green)}
+.badge.non-compliant{background:var(--red-bg);color:var(--red)}
+.badge.non-compliant .badge-dot{background:var(--red)}
+.badge.critical{background:var(--red-bg);color:var(--red)}
+.badge.major{background:var(--amber-bg);color:var(--amber)}
+.badge.moderate{background:var(--blue-bg);color:var(--blue)}
+.badge.minor{background:var(--surface-2);color:var(--text-secondary)}
+.badge.rewrite{background:var(--blue-bg);color:var(--blue)}
+.badge.manual{background:var(--amber-bg);color:var(--amber)}
+.badge.active-badge{background:var(--green-bg);color:var(--green)}
+.score-chip{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--text-secondary)}
+.score-chip.high{color:var(--red)}
+.score-chip.mid{color:var(--amber)}
+
+/* ── DETAIL PANEL ── */
+.detail-overlay{position:fixed;top:0;right:0;bottom:0;width:460px;
+  background:var(--surface);border-left:1px solid var(--border);z-index:200;
+  display:none;flex-direction:column;box-shadow:-4px 0 24px rgba(0,0,0,.06)}
+.detail-overlay.open{display:flex}
+.detail-header{padding:18px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:flex-start;justify-content:space-between}
+.detail-header-left{flex:1}
+.detail-clause-id{font-family:'DM Mono',monospace;font-size:11px;color:var(--text-muted);margin-bottom:4px}
+.detail-clause-title{font-size:15px;font-weight:500;letter-spacing:-0.01em}
+.close-btn{width:28px;height:28px;border-radius:6px;border:1px solid var(--border);
+  background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:13px;color:var(--text-secondary);flex-shrink:0;margin-left:12px;transition:all .15s}
+.close-btn:hover{background:var(--surface-2);color:var(--text-primary)}
+.detail-body{flex:1;overflow-y:auto;padding:20px}
+.detail-section{margin-bottom:20px}
+.detail-section-label{font-size:10px;font-weight:500;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.detail-badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.explanation-box{background:var(--surface-2);border-radius:var(--radius-sm);
+  padding:12px 14px;font-size:13px;line-height:1.6;color:var(--text-primary);
+  border-left:3px solid var(--border-strong)}
+.violation-item{display:flex;align-items:center;gap:8px;padding:7px 0;
+  border-bottom:1px solid var(--border);font-size:12px;color:var(--text-primary)}
+.violation-item:last-child{border-bottom:none}
+.violation-item i{color:var(--red);font-size:11px;flex-shrink:0}
+.citation-box{background:var(--surface-2);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:8px}
+.citation-section{font-size:11px;font-weight:500;color:var(--text-secondary);
+  font-family:'DM Mono',monospace;margin-bottom:5px}
+.citation-excerpt{font-size:12px;color:var(--text-secondary);line-height:1.5;font-style:italic}
+.rewrite-box{background:#f0faf4;border:1px solid #b7e4c7;border-radius:var(--radius-sm);padding:14px}
+.rewrite-box pre{font-family:'DM Sans',sans-serif;font-size:12px;line-height:1.6;
+  color:#1b4332;white-space:pre-wrap;word-break:break-word}
+.confidence-bar-track{width:100%;height:4px;background:var(--border);
+  border-radius:2px;overflow:hidden;margin-top:6px}
+.confidence-bar-fill{height:100%;border-radius:2px;background:var(--text-primary);transition:width .6s ease}
+.confidence-label{display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted)}
+.manual-warning{background:var(--amber-bg);border:1px solid #f0c040;
+  border-radius:var(--radius-sm);padding:10px 12px;font-size:12px;color:var(--amber);
+  display:flex;align-items:flex-start;gap:8px}
+
+/* ── REVIEW PAGE ── */
+.review-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.upload-card{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:20px}
+.upload-card-title{font-size:11px;font-weight:500;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px}
+.upload-zone{border:1.5px dashed var(--border-strong);border-radius:var(--radius);
+  padding:24px 20px;cursor:pointer;transition:all .2s;background:var(--surface-2);
+  text-align:center}
+.upload-zone:hover{border-color:var(--text-primary);background:#ebe9e0}
+.upload-zone.has-file{border-color:var(--green);background:#f0faf4}
+.upload-zone i{font-size:20px;color:var(--text-muted);margin-bottom:8px;display:block}
+.upload-zone.has-file i{color:var(--green)}
+.upload-zone-text{font-size:13px;color:var(--text-secondary)}
+.upload-zone-sub{font-size:11px;color:var(--text-muted);margin-top:3px}
+input[type=file]{display:none}
+.run-row{display:flex;align-items:center;gap:12px}
+.progress-wrap{flex:1}
+.progress-track{width:100%;height:4px;background:var(--border);
+  border-radius:2px;overflow:hidden;margin-bottom:5px}
+.progress-fill{height:100%;background:var(--text-primary);border-radius:2px;
+  transition:width .35s ease}
+.progress-label-row{display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted)}
+
+/* ── POLICY PAGE ── */
+.policy-file-row{display:flex;align-items:center;gap:12px;padding:12px 14px;
+  background:var(--surface-2);border-radius:var(--radius-sm);margin-bottom:8px;
+  border:1px solid var(--border)}
+.policy-file-row i{color:var(--red);font-size:18px;flex-shrink:0}
+.policy-file-name{font-weight:500;font-size:13px;color:var(--text-primary)}
+.policy-file-meta{font-size:11px;color:var(--text-muted);margin-top:2px}
+
+/* ── EMPTY STATE ── */
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-muted)}
+.empty-state i{font-size:32px;margin-bottom:12px;display:block}
+.empty-state p{font-size:13px;line-height:1.6}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:20px;right:20px;background:var(--text-primary);color:white;
+  padding:10px 16px;border-radius:var(--radius-sm);font-size:13px;
+  z-index:9999;opacity:0;transition:opacity .25s;pointer-events:none}
+.toast.show{opacity:1}
+.toast.error{background:var(--red)}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon"><i class="fa-solid fa-shield-halved"></i></div>
+    <div>
+      <div class="logo-text">ComplianceAI</div>
+      <div class="logo-sub">v1.0 · groq llama-3.3</div>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Workspace</div>
+    <div class="nav-item active" onclick="switchPage('dashboard')">
+      <span class="nav-icon"><i class="fa-regular fa-chart-bar"></i></span>
+      Dashboard
+    </div>
+    <div class="nav-item" onclick="switchPage('review')">
+      <span class="nav-icon"><i class="fa-regular fa-file-lines"></i></span>
+      Review contract
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Configuration</div>
+    <div class="nav-item" onclick="switchPage('policy')">
+      <span class="nav-icon"><i class="fa-regular fa-book"></i></span>
+      Policy library
+    </div>
+    <div class="nav-item" onclick="switchPage('manual')">
+      <span class="nav-icon"><i class="fa-regular fa-flag"></i></span>
+      Manual review
+      <span class="badge-count" id="manual-badge">0</span>
+    </div>
+  </div>
+
+  <div class="sidebar-bottom">
+    <div class="policy-status">
+      <div class="policy-status-label">
+        <span class="policy-status-dot grey" id="policy-dot"></span>Active policy
+      </div>
+      <div class="policy-status-name" id="sidebar-policy-name">No policy ingested</div>
+      <div style="font-size:10px;color:var(--text-muted);margin-top:2px" id="sidebar-chunk-count">—</div>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-title" id="topbar-title">Dashboard</div>
+      <div class="file-chip" id="file-chip">
+        <i class="fa-solid fa-file-pdf"></i>
+        <span id="file-chip-name"></span>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn" onclick="exportReport()">
+        <i class="fa-solid fa-download"></i> Export JSON
+      </button>
+      <button class="btn btn-primary" onclick="switchPage('review')">
+        <i class="fa-solid fa-plus"></i> New review
+      </button>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- ══ DASHBOARD ══ -->
+    <div class="page active" id="page-dashboard">
+
+      <!-- empty state -->
+      <div id="dash-empty" class="empty-state">
+        <i class="fa-regular fa-folder-open"></i>
+        <p>No review loaded.<br>Upload a contract to get started.</p>
+        <br>
+        <button class="btn btn-primary" onclick="switchPage('review')">
+          <i class="fa-solid fa-upload"></i> Upload contract
+        </button>
+      </div>
+
+      <!-- populated dashboard -->
+      <div id="dash-content" style="display:none">
+
+        <div class="metrics-row">
+          <div class="metric-card">
+            <div class="metric-label">Total clauses</div>
+            <div class="metric-value" id="m-total">—</div>
+            <div class="metric-sub">Reviewed in full</div>
+          </div>
+          <div class="metric-card green">
+            <div class="metric-label">Compliant</div>
+            <div class="metric-value" id="m-compliant">—</div>
+            <div class="metric-sub" id="m-pass-rate">—</div>
+          </div>
+          <div class="metric-card red">
+            <div class="metric-label">Non-compliant</div>
+            <div class="metric-value" id="m-nc">—</div>
+            <div class="metric-sub" id="m-nc-sub">—</div>
+          </div>
+          <div class="metric-card amber">
+            <div class="metric-label">Manual review</div>
+            <div class="metric-value" id="m-manual">—</div>
+            <div class="metric-sub">Flagged for human review</div>
+          </div>
+        </div>
+
+        <div class="charts-row">
+          <div class="chart-card">
+            <div class="chart-card-title">Risk distribution</div>
+            <div class="chart-wrap"><canvas id="riskChart"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-card-title">Violations by policy area</div>
+            <div class="chart-wrap"><canvas id="areaChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="section-header">
+          <div class="section-title">Clause results</div>
+          <div style="font-size:11px;color:var(--text-muted)">Click any row to inspect</div>
+        </div>
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Clause</th>
+                <th>Verdict</th>
+                <th>Risk level</th>
+                <th>Score</th>
+                <th>Policy area</th>
+                <th>Rewrite</th>
+                <th>Confidence</th>
+              </tr>
+            </thead>
+            <tbody id="clause-tbody"></tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ══ REVIEW CONTRACT ══ -->
+    <div class="page" id="page-review">
+
+      <div class="review-grid">
+        <!-- Policy upload -->
+        <div class="upload-card">
+          <div class="upload-card-title">
+            <i class="fa-regular fa-book" style="margin-right:5px"></i>
+            Policy documents
+          </div>
+          <label for="policy-input">
+            <div class="upload-zone" id="policy-zone">
+              <i class="fa-solid fa-cloud-arrow-up"></i>
+              <div class="upload-zone-text" id="policy-label">
+                Drop policy PDFs or click to browse
+              </div>
+              <div class="upload-zone-sub">Multiple PDFs allowed · Optional if already ingested</div>
+            </div>
+          </label>
+          <input type="file" id="policy-input" accept=".pdf" multiple
+                 onchange="handlePolicySelect(this)">
+        </div>
+
+        <!-- Contract upload -->
+        <div class="upload-card">
+          <div class="upload-card-title">
+            <i class="fa-regular fa-file-lines" style="margin-right:5px"></i>
+            Contract PDF
+          </div>
+          <label for="contract-input">
+            <div class="upload-zone" id="contract-zone">
+              <i class="fa-solid fa-file-contract"></i>
+              <div class="upload-zone-text" id="contract-label">
+                Drop contract PDF or click to browse
+              </div>
+              <div class="upload-zone-sub">PDF only</div>
+            </div>
+          </label>
+          <input type="file" id="contract-input" accept=".pdf"
+                 onchange="handleContractSelect(this)">
+        </div>
+      </div>
+
+      <!-- Run row -->
+      <div class="run-row">
+        <button class="btn btn-primary" id="run-btn" disabled onclick="runReview()">
+          <i class="fa-solid fa-bolt"></i> Run compliance review
+        </button>
+        <div class="progress-wrap" id="progress-wrap" style="display:none">
+          <div class="progress-track">
+            <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+          </div>
+          <div class="progress-label-row">
+            <span id="progress-label">Starting…</span>
+            <span id="progress-pct">0%</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══ POLICY LIBRARY ══ -->
+    <div class="page" id="page-policy">
+      <div style="max-width:560px">
+        <div class="section-header" style="margin-bottom:16px">
+          <div class="section-title">Policy library</div>
+          <button class="btn" onclick="loadPolicies()">
+            <i class="fa-solid fa-rotate"></i> Refresh
+          </button>
+        </div>
+        <div id="policy-list">
+          <div class="empty-state" style="padding:40px 0">
+            <i class="fa-regular fa-book"></i>
+            <p>No policies ingested yet.<br>Upload PDFs in Review contract.</p>
+          </div>
+        </div>
+        <div style="margin-top:14px;font-size:12px;color:var(--text-muted)">
+          Policies are stored in
+          <code style="background:var(--surface-2);padding:1px 5px;border-radius:3px;
+                font-family:'DM Mono',monospace">policies/</code>
+          and automatically ingested on upload.
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ MANUAL REVIEW ══ -->
+    <div class="page" id="page-manual">
+      <div id="manual-empty" class="empty-state" style="margin-top:60px">
+        <i class="fa-regular fa-circle-check" style="color:var(--green)"></i>
+        <p>No clauses flagged for manual review.<br>All rewrites passed validation.</p>
+      </div>
+      <div id="manual-list" style="max-width:680px"></div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- DETAIL PANEL -->
+<div class="detail-overlay" id="detail-panel">
+  <div class="detail-header">
+    <div class="detail-header-left">
+      <div class="detail-clause-id" id="dp-id"></div>
+      <div class="detail-clause-title" id="dp-title"></div>
+    </div>
+    <button class="close-btn" onclick="closeDetail()">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
+  <div class="detail-body" id="dp-body"></div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+let DATA        = [];
+let FILENAME    = '';
+let policyFiles = [];
+let contractFile= null;
+
+let riskChartInst = null;
+let areaChartInst = null;
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  loadPolicies();
+});
+
+// ══════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════
+function toast(msg, isError = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (isError ? ' error' : '');
+  setTimeout(() => el.className = 'toast', 3000);
+}
+
+// ══════════════════════════════════════════
+// NAV
+// ══════════════════════════════════════════
+const PAGE_TITLES = {
+  dashboard: 'Dashboard',
+  review:    'Review contract',
+  policy:    'Policy library',
+  manual:    'Manual review queue',
+};
+
+function switchPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('topbar-title').textContent = PAGE_TITLES[page] || page;
+  document.getElementById('page-' + page).classList.add('active');
+
+  // find the nav item by onclick attribute
+  const navItems = document.querySelectorAll('.nav-item');
+  navItems.forEach(n => {
+    if (n.getAttribute('onclick') === `switchPage('${page}')`) n.classList.add('active');
+  });
+
+  if (page === 'policy') loadPolicies();
+  closeDetail();
+}
+
+// ══════════════════════════════════════════
+// POLICY LIBRARY
+// ══════════════════════════════════════════
+async function loadPolicies() {
+  try {
+    const res  = await fetch('/api/policies');
+    const data = await res.json();
+    renderPolicies(data);
+  } catch(e) {
+    console.error('Failed to load policies', e);
+  }
+}
+
+function renderPolicies(data) {
+  const { policies, chunk_count } = data;
+
+  // Update sidebar
+  if (policies.length > 0) {
+    document.getElementById('policy-dot').classList.remove('grey');
+    document.getElementById('sidebar-policy-name').textContent = policies[0].name;
+    document.getElementById('sidebar-chunk-count').textContent =
+      `${chunk_count} chunks · v1.0`;
+  } else {
+    document.getElementById('policy-dot').classList.add('grey');
+    document.getElementById('sidebar-policy-name').textContent = 'No policy ingested';
+    document.getElementById('sidebar-chunk-count').textContent = '—';
+  }
+
+  // Policy library page
+  const listEl = document.getElementById('policy-list');
+  if (!policies.length) {
+    listEl.innerHTML = `<div class="empty-state" style="padding:40px 0">
+      <i class="fa-regular fa-book"></i>
+      <p>No policies ingested yet.<br>Upload PDFs in Review contract.</p>
+    </div>`;
+    return;
+  }
+
+  listEl.innerHTML = policies.map(p => {
+    const date = new Date(p.ingested_at * 1000).toLocaleDateString('en-GB', {
+      day:'numeric', month:'short', year:'numeric'
+    });
+    return `<div class="policy-file-row">
+      <i class="fa-solid fa-file-pdf"></i>
+      <div style="flex:1">
+        <div class="policy-file-name">${p.name}</div>
+        <div class="policy-file-meta">${p.size_kb} KB · Added ${date}</div>
+      </div>
+      <span class="badge active-badge">Active</span>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════
+// FILE SELECTION
+// ══════════════════════════════════════════
+function handlePolicySelect(input) {
+  if (!input.files.length) return;
+  policyFiles = Array.from(input.files);
+  const zone  = document.getElementById('policy-zone');
+  const label = document.getElementById('policy-label');
+  zone.classList.add('has-file');
+  label.textContent = policyFiles.length === 1
+    ? policyFiles[0].name
+    : `${policyFiles.length} files selected`;
+  checkReady();
+}
+
+function handleContractSelect(input) {
+  if (!input.files.length) return;
+  contractFile = input.files[0];
+  const zone   = document.getElementById('contract-zone');
+  const label  = document.getElementById('contract-label');
+  zone.classList.add('has-file');
+  label.textContent = contractFile.name;
+  checkReady();
+}
+
+function checkReady() {
+  // Ready if contract selected AND (policies selected OR policies already in library)
+  const btn = document.getElementById('run-btn');
+  if (contractFile) {
+    btn.disabled = false;
+  }
+}
+
+// ══════════════════════════════════════════
+// RUN REVIEW
+// ══════════════════════════════════════════
+async function runReview() {
+  if (!contractFile) { toast('Please select a contract PDF', true); return; }
+
+  const btn  = document.getElementById('run-btn');
+  const wrap = document.getElementById('progress-wrap');
+  btn.disabled = true;
+  wrap.style.display = 'block';
+
+  const steps = [
+    [8,  'Uploading files…'],
+    [18, 'Ingesting policy documents…'],
+    [28, 'Parsing contract PDF…'],
+    [38, 'Masking PII…'],
+    [48, 'Running hybrid retrieval…'],
+    [58, 'Parent-child expansion…'],
+    [68, 'Extracting evidence…'],
+    [78, 'Running compliance + risk agent…'],
+    [88, 'Generating rewrites…'],
+    [95, 'Validating rewrites…'],
+  ];
+  let si = 0;
+  const fill  = document.getElementById('progress-fill');
+  const label = document.getElementById('progress-label');
+  const pct   = document.getElementById('progress-pct');
+
+  // Animate progress while waiting for API
+  const iv = setInterval(() => {
+    if (si < steps.length) {
+      fill.style.width  = steps[si][0] + '%';
+      label.textContent = steps[si][1];
+      pct.textContent   = steps[si][0] + '%';
+      si++;
+    }
+  }, 700);
+
+  try {
+    // Step 1: ingest new policy PDFs if provided
+    if (policyFiles.length > 0) {
+      const pForm = new FormData();
+      policyFiles.forEach(f => pForm.append('files', f));
+      const pRes = await fetch('/api/policies/ingest', { method: 'POST', body: pForm });
+      if (!pRes.ok) throw new Error('Policy ingestion failed');
+      await loadPolicies();
+    }
+
+    // Step 2: review contract
+    const cForm = new FormData();
+    cForm.append('contract', contractFile);
+    const res = await fetch('/api/review', { method: 'POST', body: cForm });
+
+    clearInterval(iv);
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Review failed');
+    }
+
+    const json = await res.json();
+    DATA     = json.results;
+    FILENAME = json.filename;
+
+    // Complete progress
+    fill.style.width  = '100%';
+    label.textContent = 'Review complete';
+    pct.textContent   = '100%';
+
+    setTimeout(() => {
+      wrap.style.display = 'none';
+      fill.style.width   = '0%';
+      btn.disabled = false;
+      buildDashboard();
+      switchPage('dashboard');
+      toast(`✓ ${DATA.length} clauses reviewed`);
+    }, 500);
+
+  } catch(e) {
+    clearInterval(iv);
+    wrap.style.display = 'none';
+    fill.style.width   = '0%';
+    btn.disabled = false;
+    toast(e.message, true);
+  }
+}
+
+// ══════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════
+function buildDashboard() {
+  const total     = DATA.length;
+  const compliant = DATA.filter(d => d.compliance_verdict === 'compliant').length;
+  const nc        = total - compliant;
+  const manual    = DATA.filter(d => d.manual_review_required).length;
+  const critical  = DATA.filter(d => d.risk_level === 'critical').length;
+  const major     = DATA.filter(d => d.risk_level === 'major').length;
+  const passRate  = total > 0 ? Math.round(compliant / total * 100) : 0;
+
+  document.getElementById('m-total').textContent    = total;
+  document.getElementById('m-compliant').textContent= compliant;
+  document.getElementById('m-pass-rate').textContent= passRate + '% pass rate';
+  document.getElementById('m-nc').textContent       = nc;
+  document.getElementById('m-nc-sub').textContent   = critical + ' critical · ' + major + ' major';
+  document.getElementById('m-manual').textContent   = manual;
+
+  // Manual review badge
+  const badge = document.getElementById('manual-badge');
+  badge.textContent = manual;
+  badge.className = 'badge-count' + (manual > 0 ? ' show' : '');
+
+  // File chip
+  if (FILENAME) {
+    document.getElementById('file-chip-name').textContent = FILENAME;
+    document.getElementById('file-chip').classList.add('show');
+  }
+
+  document.getElementById('dash-empty').style.display   = 'none';
+  document.getElementById('dash-content').style.display = 'block';
+
+  buildCharts(critical, major);
+  buildTable();
+  buildManualList();
+}
+
+// ══════════════════════════════════════════
+// CHARTS
+// ══════════════════════════════════════════
+function buildCharts(critical, major) {
+  const moderate = DATA.filter(d => d.risk_level === 'moderate').length;
+  const minor    = DATA.filter(d => d.risk_level === 'minor').length;
+
+  if (riskChartInst) riskChartInst.destroy();
+  riskChartInst = new Chart(document.getElementById('riskChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: ['Critical', 'Major', 'Moderate', 'Minor'],
+      datasets: [{
+        data: [critical, major, moderate, minor],
+        backgroundColor: ['#c1121f', '#9c6f00', '#1a5276', '#2d6a4f'],
+        borderRadius: 4, borderSkipped: false
+      }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11, family: "'DM Mono'" }, color: '#9b9890' }, border: { display: false } },
+        y: { grid: { display: false }, ticks: { font: { size: 12, family: "'DM Sans'" }, color: '#6b6860' }, border: { display: false } }
+      }
+    }
+  });
+
+  const areas = {};
+  DATA.filter(d => d.compliance_verdict === 'non_compliant').forEach(d => {
+    const a = d.policy_area;
+    if (a && a !== '—') areas[a] = (areas[a] || 0) + 1;
+  });
+
+  if (areaChartInst) areaChartInst.destroy();
+  areaChartInst = new Chart(document.getElementById('areaChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(areas),
+      datasets: [{
+        data: Object.values(areas),
+        backgroundColor: '#5b4fcf',
+        borderRadius: 4, borderSkipped: false
+      }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11, family: "'DM Mono'" }, color: '#9b9890' }, border: { display: false } },
+        y: { grid: { display: false }, ticks: { font: { size: 11, family: "'DM Sans'" }, color: '#6b6860' }, border: { display: false } }
+      }
+    }
+  });
+}
+
+// ══════════════════════════════════════════
+// TABLE
+// ══════════════════════════════════════════
+function buildTable() {
+  const tbody = document.getElementById('clause-tbody');
+  tbody.innerHTML = '';
+  DATA.forEach((d, i) => {
+    const isNC = d.compliance_verdict === 'non_compliant';
+    const verdictBadge = isNC
+      ? `<span class="badge non-compliant"><span class="badge-dot"></span>Non-compliant</span>`
+      : `<span class="badge compliant"><span class="badge-dot"></span>Compliant</span>`;
+    const riskBadge = d.risk_level
+      ? `<span class="badge ${d.risk_level}">${cap(d.risk_level)}</span>` : '—';
+    const scoreChip = d.risk_score
+      ? `<span class="score-chip ${d.risk_score >= 9 ? 'high' : 'mid'}">${d.risk_score}/10</span>` : '—';
+    let rewriteBadge = '—';
+    if (d.manual_review_required) rewriteBadge = `<span class="badge manual">Manual review</span>`;
+    else if (d.suggested_rewrite) rewriteBadge = `<span class="badge rewrite">Ready</span>`;
+    const conf = Math.round((d.confidence_score || 0) * 100);
+    const tr = document.createElement('tr');
+    tr.onclick = () => openDetail(i);
+    tr.innerHTML = `
+      <td>
+        <div class="clause-name">${d.title || d.clause_id}</div>
+        <div class="clause-sub">${d.clause_id}</div>
+      </td>
+      <td>${verdictBadge}</td>
+      <td>${riskBadge}</td>
+      <td>${scoreChip}</td>
+      <td style="color:var(--text-secondary);font-size:12px">${d.policy_area || '—'}</td>
+      <td>${rewriteBadge}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden;min-width:50px">
+            <div style="height:100%;width:${conf}%;background:${conf>=90?'var(--green)':'var(--amber)'};border-radius:2px"></div>
+          </div>
+          <span style="font-size:11px;font-family:'DM Mono',monospace;color:var(--text-muted)">${conf}%</span>
+        </div>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ══════════════════════════════════════════
+// DETAIL PANEL
+// ══════════════════════════════════════════
+function openDetail(idx) {
+  const d    = DATA[idx];
+  const isNC = d.compliance_verdict === 'non_compliant';
+  const conf = Math.round((d.confidence_score || 0) * 100);
+
+  document.getElementById('dp-id').textContent    = d.clause_id;
+  document.getElementById('dp-title').textContent = d.title || d.clause_id;
+
+  let html = `<div class="detail-badges">`;
+  html += isNC
+    ? `<span class="badge non-compliant"><span class="badge-dot"></span>Non-compliant</span>`
+    : `<span class="badge compliant"><span class="badge-dot"></span>Compliant</span>`;
+  if (d.risk_level)
+    html += `<span class="badge ${d.risk_level}">${cap(d.risk_level)} · ${d.risk_score}/10</span>`;
+  html += `</div>`;
+
+  html += `<div class="detail-section">
+    <div class="detail-section-label">Assessment</div>
+    <div class="explanation-box">${d.compliance_explanation || '—'}</div>
+  </div>`;
+
+  if (d.risk_explanation) {
+    html += `<div class="detail-section">
+      <div class="detail-section-label">Risk explanation</div>
+      <div class="explanation-box" style="border-left-color:var(--red)">${d.risk_explanation}</div>
+    </div>`;
+  }
+
+  if ((d.violated_sections || []).length) {
+    html += `<div class="detail-section">
+      <div class="detail-section-label">Violated sections</div>`;
+    d.violated_sections.forEach(s => {
+      html += `<div class="violation-item"><i class="fa-solid fa-circle-xmark"></i>${s}</div>`;
+    });
+    html += `</div>`;
+  }
+
+  if ((d.citations || []).length) {
+    html += `<div class="detail-section">
+      <div class="detail-section-label">Policy citations</div>`;
+    d.citations.forEach(c => {
+      html += `<div class="citation-box">
+        <div class="citation-section">${c.section}</div>
+        <div class="citation-excerpt">"${c.excerpt}"</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (d.suggested_rewrite) {
+    html += `<div class="detail-section">
+      <div class="detail-section-label">Suggested rewrite
+        <span style="font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0">
+          — recommendation only</span>
+      </div>
+      <div class="rewrite-box"><pre>${esc(d.suggested_rewrite)}</pre></div>
+    </div>`;
+  }
+
+  if (d.manual_review_required) {
+    html += `<div class="detail-section">
+      <div class="manual-warning">
+        <i class="fa-solid fa-triangle-exclamation" style="margin-top:1px"></i>
+        <div>This clause requires manual legal review. Automated rewrite was unsuccessful after two attempts.</div>
+      </div>
+    </div>`;
+  }
+
+  html += `<div class="detail-section">
+    <div class="confidence-label"><span>${conf}% confidence</span></div>
+    <div class="confidence-bar-track">
+      <div class="confidence-bar-fill" style="width:${conf}%"></div>
+    </div>
+  </div>`;
+
+  document.getElementById('dp-body').innerHTML = html;
+  document.getElementById('detail-panel').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('open');
+}
+
+// ══════════════════════════════════════════
+// MANUAL LIST
+// ══════════════════════════════════════════
+function buildManualList() {
+  const flagged = DATA.filter(d => d.manual_review_required);
+  const listEl  = document.getElementById('manual-list');
+  const emptyEl = document.getElementById('manual-empty');
+
+  if (!flagged.length) {
+    emptyEl.style.display = 'block';
+    listEl.innerHTML = '';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  listEl.innerHTML = flagged.map(d => `
+    <div style="background:var(--surface);border:1px solid var(--border);
+         border-radius:var(--radius);padding:16px 18px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-family:'DM Mono',monospace;font-size:11px;
+              color:var(--text-muted)">${d.clause_id}</span>
+        <span class="badge manual">
+          <i class="fa-solid fa-flag" style="font-size:10px"></i> Manual review
+        </span>
+      </div>
+      <div style="font-size:13px;color:var(--text-primary);line-height:1.55;margin-bottom:10px">
+        ${d.compliance_explanation || '—'}
+      </div>
+      <div class="manual-warning">
+        <i class="fa-solid fa-triangle-exclamation" style="margin-top:1px"></i>
+        <div>Automated rewrite failed after two attempts. Human review required.</div>
+      </div>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════
+// EXPORT
+// ══════════════════════════════════════════
+function exportReport() {
+  if (!DATA.length) { toast('No review data to export', true); return; }
+  const blob = new Blob([JSON.stringify(DATA, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `compliance_${FILENAME || 'report'}.json`;
+  a.click();
+  toast('Report downloaded');
+}
+
+// ══════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════
+function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+function esc(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>

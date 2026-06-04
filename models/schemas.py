@@ -22,6 +22,18 @@ class RiskResult(BaseModel):
     risk_score: int = Field(..., ge=1, le=10)
 
 
+# Fix 1 — merged compliance + risk result from single LLM call
+class ComplianceRiskResult(BaseModel):
+    compliance_verdict: Literal["compliant", "non_compliant"]
+    compliance_explanation: str
+    violated_sections: List[str]
+    citations: List[Citation]
+    confidence_score: float = Field(..., ge=0.0, le=1.0)
+    risk_level: Optional[Literal["critical", "major", "moderate", "minor"]] = None
+    risk_score: Optional[int] = Field(None, ge=1, le=10)
+    risk_explanation: Optional[str] = None
+
+
 class RewriteResult(BaseModel):
     rewritten_clause: str
     rewrite_reasoning: Optional[str] = None

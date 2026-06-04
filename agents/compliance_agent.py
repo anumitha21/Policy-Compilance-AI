@@ -3,14 +3,11 @@
 import json
 import re
 from langchain_classic.prompts import PromptTemplate
-
 from pydantic import ValidationError
+from models.schemas import ComplianceRiskResult
 
-from models.schemas import ComplianceResult
-
-
-COMPLIANCE_PROMPT = """
-You are an AI Contract Compliance Reviewer.
+COMBINED_PROMPT = """
+You are a contract compliance and risk assessment agent.
 
 Contract Clause:
 
@@ -20,51 +17,33 @@ Policy Evidence:
 
 {evidence}
 
-Determine:
-
-1. compliant OR non_compliant
-
-2. compliance explanation
-
-3. violated policy sections
-
-4. citations
-
-5. confidence score
-
-IMPORTANT SCOPING RULE:
-Only flag a clause as non_compliant if it contains language that
-ACTIVELY VIOLATES a policy requirement.
-Do NOT flag a clause as non_compliant solely because it is silent
-on or omits a topic covered by policy. Absence of language is not
-a violation unless the policy explicitly requires that language to
-be present in every contract clause.
-
-Return JSON only.
-
-Schema:
+Return a JSON object with ALL of these fields:
 
 {{
-    "compliance_verdict":
-        "compliant" | "non_compliant",
-
-    "compliance_explanation":
-        "...",
-
-    "violated_sections":
-        ["section"],
-
-    "citations":
-    [
-        {{
-            "section":"...",
-            "excerpt":"..."
-        }}
-    ],
-
-    "confidence_score":
-        0.95
+    "compliance_verdict": "compliant" | "non_compliant",
+    "compliance_explanation": "...",
+    "violated_sections": ["section name"],
+    "citations": [{{"section": "...", "excerpt": "..."}}],
+    "confidence_score": 0.95,
+    "risk_level": "critical" | "major" | "moderate" | "minor" | null,
+    "risk_score": 7,
+    "risk_explanation": "..." | null
 }}
+
+SCOPING RULE:
+Only flag non_compliant if the clause ACTIVELY VIOLATES a policy requirement.
+Do NOT flag for silence or omission unless the policy explicitly mandates that language.
+
+RISK SCORING (only if non_compliant — set all risk fields to null if compliant):
+  critical  9-10 : removes mandatory protections / severe legal or regulatory exposure
+  major     6-8  : significant liability / procedural violation (skipping steps, missing notice)
+  moderate  3-5  : partial non-compliance, limited exposure
+  minor     1-2  : administrative or technical violation
+
+IMPORTANT: Procedural violations (skipping mediation, missing notice period) = major, NOT critical.
+Critical is reserved for removal of substantive rights.
+
+Return ONLY valid JSON. No preamble, no markdown.
 """
 
 
@@ -77,122 +56,50 @@ def _load_json(raw):
 
 class ComplianceAgent:
 
-    def __init__(
-        self,
-        llm
-    ):
-
+    def __init__(self, llm):
         self.llm = llm
-
         self.prompt = PromptTemplate(
-            input_variables=[
-                "clause",
-                "evidence"
-            ],
-            template=
-                COMPLIANCE_PROMPT
+            input_variables=["clause", "evidence"],
+            template=COMBINED_PROMPT
         )
 
-    # =====================================
-    # LLM CALL
-    # =====================================
-
-    def _invoke(
-        self,
-        clause,
-        evidence
-    ):
-
+    def _invoke(self, clause, evidence):
         prompt = self.prompt.format(
             clause=clause,
-            evidence="\n\n".join(
-                evidence
-            )
+            evidence="\n\n".join(evidence)
         )
+        return self.llm.invoke(prompt).content
 
-        response = self.llm.invoke(
-            prompt
-        )
-
-        return response.content
-
-    # =====================================
-    # VALIDATED CALL
-    # =====================================
-
-    def run(
-        self,
-        state
-    ):
-
+    def run(self, state):
         raw = self._invoke(
-            clause=state[
-                "masked_text"
-            ],
-            evidence=state[
-                "evidence"
-            ]
+            clause=state["masked_text"],
+            evidence=state["evidence"]
         )
 
         try:
-
-            parsed = _load_json(
-                raw
-            )
-
-            validated = ComplianceResult.model_validate(parsed)
+            parsed    = _load_json(raw)
+            validated = ComplianceRiskResult.model_validate(parsed)
 
         except (json.JSONDecodeError, ValidationError):
-
-            # Retry once
             raw = self._invoke(
-                clause=state[
-                    "masked_text"
-                ],
-                evidence=state[
-                    "evidence"
-                ]
+                clause=state["masked_text"],
+                evidence=state["evidence"]
             )
-
             try:
-                parsed = _load_json(
-                    raw
-                )
-
-                validated = ComplianceResult.model_validate(parsed)
+                parsed    = _load_json(raw)
+                validated = ComplianceRiskResult.model_validate(parsed)
             except (json.JSONDecodeError, ValidationError) as exc:
                 raise ValueError(
-                    "Compliance agent response invalid after retry: "
-                    f"{raw!r}"
+                    f"Compliance+Risk agent response invalid after retry: {raw!r}"
                 ) from exc
 
-        state[
-            "compliance_verdict"
-        ] = validated.compliance_verdict
-
-        state[
-            "compliance_explanation"
-        ] = (
-            validated
-            .compliance_explanation
-        )
-
-        state[
-            "violated_sections"
-        ] = (
-            validated
-            .violated_sections
-        )
-
-        state[
-            "citations"
-        ] = validated.citations
-
-        state[
-            "confidence_score"
-        ] = (
-            validated
-            .confidence_score
-        )
+        state["compliance_verdict"]     = validated.compliance_verdict
+        state["compliance_explanation"] = validated.compliance_explanation
+        state["violated_sections"]      = validated.violated_sections
+        state["citations"]              = validated.citations
+        state["confidence_score"]       = validated.confidence_score
+        state["risk_level"]             = validated.risk_level
+        state["risk_score"]             = validated.risk_score
+        state["risk_explanation"]       = validated.risk_explanation
 
         return state

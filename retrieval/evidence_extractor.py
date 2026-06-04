@@ -1,5 +1,5 @@
 # retrieval/evidence_extractor.py
-from langchain_classic.chains import LLMChain
+
 from langchain_classic.prompts import PromptTemplate
 
 
@@ -35,22 +35,13 @@ Relevant Evidence:
 
 class EvidenceExtractor:
 
-    def __init__(
-        self,
-        llm
-    ):
-
-        self.chain = LLMChain(
-            llm=llm,
-            prompt=PromptTemplate(
-                input_variables=[
-                    "clause",
-                    "context"
-                ],
-                template=
-                    EVIDENCE_EXTRACTION_PROMPT
-            )
+    def __init__(self, llm):
+        prompt = PromptTemplate(
+            input_variables=["clause", "context"],
+            template=EVIDENCE_EXTRACTION_PROMPT
         )
+        # Fix 6 — LCEL chain, no deprecated LLMChain
+        self.chain = prompt | llm
 
     # =====================================
     # EXTRACT SINGLE EVIDENCE
@@ -62,11 +53,9 @@ class EvidenceExtractor:
         context: str
     ) -> str:
 
-        result = self.chain.invoke(
+        return self.chain.invoke(
             {"clause": clause_text, "context": context}
-        )
-
-        return result["text"].strip()
+        ).content.strip()
 
     # =====================================
     # EXTRACT MULTIPLE
@@ -81,18 +70,11 @@ class EvidenceExtractor:
         evidence_list = []
 
         for item in retrieved_contexts:
-
             evidence = self.extract(
                 clause_text=clause_text,
-                context=item[
-                    "combined_context"
-                ]
+                context=item["combined_context"]
             )
-
             if evidence:
-
-                evidence_list.append(
-                    evidence
-                )
+                evidence_list.append(evidence)
 
         return evidence_list

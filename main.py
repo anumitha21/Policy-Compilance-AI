@@ -2,58 +2,22 @@
 # main.py
 
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from dotenv import load_dotenv
-
 from langchain_groq import ChatGroq
 
-from ingestion.policy_ingester import (
-    PolicyIngester
-)
-
-from ingestion.contract_parser import (
-    ContractParser
-)
-
-from preprocessing.pii_masker import (
-    PIIMasker
-)
-
-from retrieval.hybrid_retriever import (
-    HybridRetriever
-)
-
-from retrieval.parent_child import (
-    ParentChildRetriever
-)
-
-from retrieval.evidence_extractor import (
-    EvidenceExtractor
-)
-
-from agents.compliance_agent import (
-    ComplianceAgent
-)
-
-from agents.risk_agent import (
-    RiskAgent
-)
-
-from agents.rewrite_agent import (
-    RewriteAgent
-)
-
-from agents.validator_agent import (
-    ValidatorAgent
-)
-
-from graph.pipeline import (
-    CompliancePipeline
-)
-
-from models.schemas import (
-    ClauseReviewResult
-)
+from ingestion.policy_ingester import PolicyIngester
+from ingestion.contract_parser import ContractParser
+from preprocessing.pii_masker import PIIMasker
+from retrieval.hybrid_retriever import HybridRetriever
+from retrieval.parent_child import ParentChildRetriever
+from retrieval.evidence_extractor import EvidenceExtractor
+from agents.compliance_agent import ComplianceAgent
+from agents.rewrite_agent import RewriteAgent
+from agents.validator_agent import ValidatorAgent
+from graph.pipeline import CompliancePipeline
+from models.schemas import ClauseReviewResult
 
 
 # ==========================================
@@ -107,29 +71,14 @@ def ingest_policies(
 
 def build_graph():
 
-    compliance_agent = (
-        ComplianceAgent(llm)
-    )
+    compliance_agent = ComplianceAgent(llm)
+    rewrite_agent    = RewriteAgent(llm)
+    validator_agent  = ValidatorAgent(llm)
 
-    risk_agent = (
-        RiskAgent(llm)
-    )
-
-    rewrite_agent = (
-        RewriteAgent(llm)
-    )
-
-    validator_agent = (
-        ValidatorAgent(llm)
-    )
-
-    pipeline = (
-        CompliancePipeline(
-            compliance_agent,
-            risk_agent,
-            rewrite_agent,
-            validator_agent
-        )
+    pipeline = CompliancePipeline(
+        compliance_agent,
+        rewrite_agent,
+        validator_agent
     )
 
     return pipeline.build()
@@ -289,57 +238,39 @@ def review_clause(
 
 
 # ==========================================
-# CONTRACT REVIEW
+# CONTRACT REVIEW  (Fix 5 — parallel)
 # ==========================================
 
 def review_contract(
     contract_pdf: str
 ):
 
-    parser = ContractParser()
+    parser       = ContractParser()
+    masker       = PIIMasker()
+    retriever    = HybridRetriever()
+    parent_child = ParentChildRetriever()
+    extractor    = EvidenceExtractor(llm)
+    graph        = build_graph()
 
-    masker = PIIMasker()
+    clauses = parser.parse_contract(contract_pdf)
+    clauses = masker.mask_clauses(clauses)
 
-    retriever = HybridRetriever()
+    results  = [None] * len(clauses)
+    MAX_WORKERS = 4
 
-    parent_child = (
-        ParentChildRetriever()
-    )
+    def _run(idx_clause):
+        idx, clause = idx_clause
+        print(f"\nReviewing {clause['clause_id']}")
+        return idx, review_clause(clause, graph, retriever, parent_child, extractor)
 
-    extractor = (
-        EvidenceExtractor(llm)
-    )
-
-    graph = build_graph()
-
-    clauses = parser.parse_contract(
-        contract_pdf
-    )
-
-    clauses = masker.mask_clauses(
-        clauses
-    )
-
-    results = []
-
-    for clause in clauses:
-
-        print(
-            f"\nReviewing "
-            f"{clause['clause_id']}"
-        )
-
-        result = review_clause(
-            clause,
-            graph,
-            retriever,
-            parent_child,
-            extractor
-        )
-
-        results.append(
-            result
-        )
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(_run, (i, c)): i
+            for i, c in enumerate(clauses)
+        }
+        for future in as_completed(futures):
+            idx, result = future.result()
+            results[idx] = result
 
     return results
 
