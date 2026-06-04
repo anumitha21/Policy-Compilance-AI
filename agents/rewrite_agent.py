@@ -36,6 +36,7 @@ MANDATORY RULES:
 4. Align with cited policy sections
 5. Keep legal drafting style
 6. Produce a complete clause
+7.Do not reference internal policy section numbers in the rewritten clause. Write only contract language.
 
 POLICY-SPECIFIC RULES (override clause language if conflicting):
 
