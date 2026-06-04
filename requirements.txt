@@ -1,0 +1,15 @@
+langchain
+langchain-groq
+langchain-core
+langgraph
+langchain-community
+langchain-huggingface
+chromadb
+pdfplumber
+rank_bm25
+sentence-transformers
+presidio-analyzer
+presidio-anonymizer
+pydantic>=2.0
+python-dotenv
+scikit-learn

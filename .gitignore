@@ -1,0 +1,52 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Type checking
+.mypy_cache/
+.pyre/
+
+# --- Environment / secrets ---
+.env
+*.env
+
+# --- Project generated artifacts ---
+# Vector DB / retrieval indexes / serialized artifacts
+vector_db/
+data/
+
+# But keep datasets/policies if you ever add them inside data;
+# remove this line if you want to commit some files under data/.
+# Uncomment to allow a specific file pattern, for example:
+# !data/README.md
+
+# Output folders
+outputs/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# --- Misc ---
+*.log
+
+# If you have a local git folder accidentally created
+.git/
+
