@@ -1,80 +1,63 @@
 # retrieval/evidence_extractor.py
 
-from langchain_classic.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 
 
-EVIDENCE_EXTRACTION_PROMPT = """
-You are a policy evidence extraction system.
+EVIDENCE_PROMPT = """You are a legal evidence extraction assistant.
 
 Contract Clause:
-
 {clause}
 
-Policy Context:
-
+Policy Section:
 {context}
 
-Task:
-
-Extract ONLY the sentences and paragraphs
-from the policy context that are directly
-relevant to assessing the clause.
-
-Rules:
-
-- Remove unrelated text
-- Preserve exact wording
-- Do not summarize
-- Do not explain
-- Do not analyze
-- Return only extracted evidence
-
-Relevant Evidence:
+Extract only the sentences and paragraphs from the policy section
+directly relevant to assessing this clause.
+Remove all unrelated text.
+Return only the extracted evidence, nothing else.
 """
 
 
 class EvidenceExtractor:
 
     def __init__(self, llm):
-        prompt = PromptTemplate(
+        self.llm = llm
+        self.prompt = PromptTemplate(
             input_variables=["clause", "context"],
-            template=EVIDENCE_EXTRACTION_PROMPT
+            template=EVIDENCE_PROMPT
         )
-        # Fix 6 — LCEL chain, no deprecated LLMChain
-        self.chain = prompt | llm
+        self.chain = self.prompt | self.llm  # LCEL — no LLMChain
 
-    # =====================================
-    # EXTRACT SINGLE EVIDENCE
-    # =====================================
+    def extract(self, clause_text: str, chunks: list[dict]) -> list[str]:
+        """
+        One LLM call per chunk. Returns a list of extracted evidence strings.
+        Each string maps to one policy chunk — citations stay attributable.
+        """
+        from utils.retry import llm_invoke_with_retry
 
-    def extract(
-        self,
-        clause_text: str,
-        context: str
-    ) -> str:
+        evidence = []
+        for chunk in chunks:
+            context = chunk.get("combined_context") or chunk.get("text", "")
+            words   = context.split()
+            if len(words) > 300:
+                context = " ".join(words[:300])
 
-        return self.chain.invoke(
-            {"clause": clause_text, "context": context}
-        ).content.strip()
+            try:
+                result = llm_invoke_with_retry(
+                    self.llm,
+                    self.prompt.format(clause=clause_text, context=context)
+                ).content.strip()
 
-    # =====================================
-    # EXTRACT MULTIPLE
-    # =====================================
+                if result:
+                    evidence.append(result)
 
-    def extract_all(
-        self,
-        clause_text: str,
-        retrieved_contexts: list
-    ) -> list[str]:
+            except Exception as e:
+                print(f"[EVIDENCE] extraction failed for chunk, using raw: {e}")
+                section_label = chunk.get("title") or chunk.get("section_number") or "Policy Section"
+                evidence.append(f"[{section_label}]\n{context}")
 
-        evidence_list = []
+        return evidence
 
-        for item in retrieved_contexts:
-            evidence = self.extract(
-                clause_text=clause_text,
-                context=item["combined_context"]
-            )
-            if evidence:
-                evidence_list.append(evidence)
-
-        return evidence_list
+    # keep extract_all as alias so existing call sites don't break
+    def extract_all(self, clause_text: str, retrieved_contexts: list) -> list[str]:
+        return self.extract(clause_text, retrieved_contexts)

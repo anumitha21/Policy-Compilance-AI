@@ -5,6 +5,7 @@ import re
 from langchain_classic.prompts import PromptTemplate
 from pydantic import ValidationError
 from models.schemas import ComplianceRiskResult
+from utils.retry import llm_invoke_with_retry
 
 COMBINED_PROMPT = """
 You are a contract compliance and risk assessment agent.
@@ -29,6 +30,14 @@ Return a JSON object with ALL of these fields:
     "risk_score": 7,
     "risk_explanation": "..." | null
 }}
+
+CITATION RULES — read carefully:
+- citations must reference POLICY sections only (e.g. "1.1 Notice Period", "6.3 Arbitration").
+- NEVER cite the contract clause itself, the contract party names, or "Policy Evidence" as a section.
+- The "section" field must be the policy section number and title (e.g. "2.1 Liability Cap").
+- The "excerpt" must be the verbatim policy text, not contract text.
+- For compliant clauses, still populate citations with the policy sections you checked
+  against to confirm compliance — do not return an empty citations array.
 
 SCOPING RULE:
 Only flag non_compliant if the clause ACTIVELY VIOLATES a policy requirement.
@@ -68,7 +77,7 @@ class ComplianceAgent:
             clause=clause,
             evidence="\n\n".join(evidence)
         )
-        return self.llm.invoke(prompt).content
+        return llm_invoke_with_retry(self.llm, prompt).content
 
     def run(self, state):
         raw = self._invoke(

@@ -132,7 +132,8 @@ async def review_contract(contract: UploadFile = File(...)):
             idx, clause = idx_clause
             return idx, review_clause(clause, graph, retriever, parent_child, extractor)
 
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        # 1 worker — sequential, avoids burst on 12k TPM free tier
+        with ThreadPoolExecutor(max_workers=1) as executor:
             futures = {
                 executor.submit(_run, (i, c)): i
                 for i, c in enumerate(clauses)

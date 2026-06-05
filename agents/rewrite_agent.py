@@ -5,6 +5,7 @@ import re
 from models.schemas import RewriteResult
 from pydantic import ValidationError
 from langchain_classic.prompts import PromptTemplate
+from utils.retry import llm_invoke_with_retry
 
 
 REWRITE_PROMPT = """
@@ -111,9 +112,7 @@ class RewriteAgent:
            )
         )
 
-        response = self.llm.invoke(
-            prompt
-        )
+        response = llm_invoke_with_retry(self.llm, prompt)
 
         return response.content
 

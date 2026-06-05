@@ -43,8 +43,7 @@ if not GROQ_API_KEY:
 llm = ChatGroq(
     model="llama-3.3-70b-versatile",
     temperature=0,
-    api_key=GROQ_API_KEY
-    #model_kwargs={"response_format": {"type": "json_object"}}
+    api_key=GROQ_API_KEY,
 )
 
 
@@ -256,7 +255,7 @@ def review_contract(
     clauses = masker.mask_clauses(clauses)
 
     results  = [None] * len(clauses)
-    MAX_WORKERS = 4
+    MAX_WORKERS = 1  # sequential — avoids burst on 12k TPM free tier
 
     def _run(idx_clause):
         idx, clause = idx_clause

@@ -3,18 +3,11 @@
 import json
 import re
 from langchain_classic.prompts import PromptTemplate
-
 from pydantic import ValidationError
-
-from sentence_transformers import (
-    SentenceTransformer
-)
-
-from sklearn.metrics.pairwise import (
-    cosine_similarity
-)
-
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
 from models.schemas import ValidatorResult
+from utils.retry import llm_invoke_with_retry
 
 
 VALIDATOR_PROMPT = """
@@ -104,9 +97,7 @@ class ValidatorAgent:
                 )
         )
 
-        response = self.llm.invoke(
-            prompt
-        )
+        response = llm_invoke_with_retry(self.llm, prompt)
 
         return response.content
 
