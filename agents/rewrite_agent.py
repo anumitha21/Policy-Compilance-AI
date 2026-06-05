@@ -37,7 +37,7 @@ MANDATORY RULES:
 4. Align with cited policy sections
 5. Keep legal drafting style
 6. Produce a complete clause
-7.Do not reference internal policy section numbers in the rewritten clause. Write only contract language.
+7. Do not reference internal policy section numbers in the rewritten clause. Write only contract language.
 
 POLICY-SPECIFIC RULES (override clause language if conflicting):
 
@@ -62,6 +62,41 @@ Return JSON only.
 }}
 """
 
+REWRITE_RETRY_PROMPT = """
+You are a contract remediation specialist.
+
+Your previous rewrite was rejected for this reason:
+{validator_feedback}
+
+Original clause:
+{clause_text}
+
+Policy evidence:
+{evidence}
+
+Previous failed rewrite:
+{failed_rewrite}
+
+Generate a corrected rewrite that specifically addresses the rejection reason.
+Do not repeat the same rewrite.
+
+MANDATORY RULES:
+
+1. Preserve original business intent
+2. Modify ONLY violating language
+3. Do NOT introduce new obligations
+4. Align with cited policy sections
+5. Keep legal drafting style
+6. Produce a complete clause
+7. Do not reference internal policy section numbers. Write only contract language.
+
+Return JSON only.
+
+{{
+    "rewritten_clause":"..."
+}}
+"""
+
 
 def _load_json(raw):
     raw = (raw or "").strip()
@@ -73,101 +108,100 @@ def _load_json(raw):
 class RewriteAgent:
 
     def __init__(self, llm):
-
         self.llm = llm
-
         self.prompt = PromptTemplate(
-            input_variables=[
-                "clause_text",
-                "evidence",
-                "violated_sections",
-                "citations"
-            ],
+            input_variables=["clause_text", "evidence", "violated_sections", "citations"],
             template=REWRITE_PROMPT
         )
-
-    # ====================================
-    # LLM CALL
-    # ====================================
-
-    def _invoke(
-        self,
-        clause_text,
-        evidence,
-        violated_sections,
-        citations
-    ):
-
-        prompt = self.prompt.format(
-            clause_text=clause_text,
-            evidence="\n\n".join(
-                evidence
-            ),
-            violated_sections="\n".join(
-                violated_sections
-            ),
-            citations=json.dumps(
-            [c.model_dump() for c in citations],
-            indent=2
-           )
+        self.retry_prompt = PromptTemplate(
+            input_variables=[
+                "validator_feedback", "clause_text", "evidence",
+                "violated_sections", "citations", "failed_rewrite"
+            ],
+            template=REWRITE_RETRY_PROMPT
         )
 
-        response = llm_invoke_with_retry(self.llm, prompt)
+    # ====================================
+    # LLM CALLS
+    # ====================================
 
-        return response.content
+    def _invoke(self, clause_text, evidence, violated_sections, citations):
+        prompt = self.prompt.format(
+            clause_text=clause_text,
+            evidence="\n\n".join(evidence),
+            violated_sections="\n".join(violated_sections),
+            citations=json.dumps(
+                [c.model_dump() if hasattr(c, "model_dump") else c for c in citations],
+                indent=2
+            )
+        )
+        return llm_invoke_with_retry(self.llm, prompt).content
+
+    def _invoke_retry(self, clause_text, evidence, violated_sections,
+                      citations, validator_feedback, failed_rewrite):
+        prompt = self.retry_prompt.format(
+            validator_feedback=validator_feedback or "The rewrite did not satisfy the policy requirements.",
+            clause_text=clause_text,
+            evidence="\n\n".join(evidence),
+            violated_sections="\n".join(violated_sections),
+            citations=json.dumps(
+                [c.model_dump() if hasattr(c, "model_dump") else c for c in citations],
+                indent=2
+            ),
+            failed_rewrite=failed_rewrite or ""
+        )
+        return llm_invoke_with_retry(self.llm, prompt).content
 
     # ====================================
     # MAIN ENTRY
     # ====================================
 
     def run(self, state):
+        # Use retry prompt if validator feedback exists from a previous attempt
+        validator_feedback = state.get("validator_feedback")
+        failed_rewrites    = state.get("failed_rewrites") or []
 
+        if validator_feedback:
+            failed_rewrite = (
+                failed_rewrites[-1]
+                if failed_rewrites
+                else state.get("rewritten_clause", "")
+            )
 
-    # existing code below
-
-        raw = self._invoke(
-            
-            clause_text=state["masked_text"],
-            evidence=state[
-                "evidence"
-            ],
-            violated_sections=state[
-                "violated_sections"
-            ],
-            citations=state[
-                "citations"
-            ]
-        )
-
-        try:
-
-            parsed = _load_json(raw)
-
-
-            validated = RewriteResult.model_validate(parsed)
-
-        except (json.JSONDecodeError, ValidationError):
-
+            raw = self._invoke_retry(
+                clause_text=state["masked_text"],
+                evidence=state["evidence"],
+                violated_sections=state["violated_sections"],
+                citations=state["citations"],
+                validator_feedback=validator_feedback,
+                failed_rewrite=failed_rewrite
+            )
+        else:
             raw = self._invoke(
-                clause_text=state["clause_text"],
+                clause_text=state["masked_text"],
                 evidence=state["evidence"],
                 violated_sections=state["violated_sections"],
                 citations=state["citations"]
             )
 
+        try:
+            parsed    = _load_json(raw)
+            validated = RewriteResult.model_validate(parsed)
+
+        except (json.JSONDecodeError, ValidationError):
+            raw = self._invoke(
+                clause_text=state["masked_text"],
+                evidence=state["evidence"],
+                violated_sections=state["violated_sections"],
+                citations=state["citations"]
+            )
             try:
-                parsed = _load_json(raw)
+                parsed    = _load_json(raw)
                 validated = RewriteResult.model_validate(parsed)
             except (json.JSONDecodeError, ValidationError) as exc:
                 raise ValueError(
-                    "Rewrite agent response invalid after retry: "
-                    f"{raw!r}"
+                    f"Rewrite agent response invalid after retry: {raw!r}"
                 ) from exc
 
-        state["rewritten_clause"] = (
-            parsed.get(
-                "rewritten_clause"
-            )
-        )
-
+        state["rewritten_clause"] = parsed.get("rewritten_clause")
         return state

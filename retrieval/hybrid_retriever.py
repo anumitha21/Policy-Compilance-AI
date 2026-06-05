@@ -228,14 +228,14 @@ class HybridRetriever:
         semantic_results = (
             self.semantic_search(
                 query=query,
-                top_k=10
+                top_k=15
             )
         )
 
         bm25_results = (
             self.bm25_search(
                 query=query,
-                top_k=10
+                top_k=15
             )
         )
 
@@ -250,7 +250,7 @@ class HybridRetriever:
             self.rerank(
                 query=query,
                 documents=merged,
-                top_n=5
+                top_n=10
             )
         )
 
