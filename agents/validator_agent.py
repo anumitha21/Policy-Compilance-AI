@@ -226,6 +226,9 @@ class ValidatorAgent:
             "validation_passed"
         ]:
 
+            if state.get("failed_rewrites") is None:
+                state["failed_rewrites"] = []
+
             state[
                 "failed_rewrites"
             ].append(

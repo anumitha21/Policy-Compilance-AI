@@ -7,18 +7,9 @@ class ParentChildRetriever:
 
     def __init__(
         self,
-        chroma_path: str = "data/chroma"
+        collection
     ):
-
-        client = PersistentClient(
-            path=chroma_path
-        )
-
-        self.collection = (
-            client.get_collection(
-                "policy_chunks"
-            )
-        )
+        self.collection = collection
 
     # ==========================================
     # GET PARENT SECTION

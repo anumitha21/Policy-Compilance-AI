@@ -17,8 +17,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── Pipeline imports ───────────────────────────────────────────────
-from main import build_graph, review_clause, llm
-from ingestion.policy_ingester import PolicyIngester
+from main import (
+    build_graph,
+    review_clause,
+    llm,
+    chroma_client,
+    embed_model,
+    reranker,
+    list_policy_collections,
+    detect_policy_collection,
+    build_bm25_corpus
+)
+from ingestion.policy_ingester import ingest_policy
 from ingestion.contract_parser import ContractParser
 from preprocessing.pii_masker import PIIMasker
 from retrieval.hybrid_retriever import HybridRetriever
@@ -59,9 +69,14 @@ def serve_ui():
 def list_policies():
     """Return all ingested policy PDFs with metadata."""
     try:
-        client = PersistentClient(path="data/chroma")
-        col    = client.get_or_create_collection("policy_chunks")
-        chunk_count = col.count()
+        cols = list_policy_collections(chroma_client)
+        chunk_count = 0
+        for name in cols:
+            try:
+                col = chroma_client.get_collection(name)
+                chunk_count += col.count()
+            except Exception:
+                pass
     except Exception:
         chunk_count = 0
 
@@ -82,14 +97,13 @@ def list_policies():
 @app.post("/api/policies/ingest")
 async def ingest_policies(files: list[UploadFile] = File(...)):
     """Upload and ingest one or more policy PDFs."""
-    ingester = PolicyIngester()
     saved = []
 
     for f in files:
         dest = POLICY_DIR / f.filename
         content = await f.read()
         dest.write_bytes(content)
-        ingester.ingest_policy(str(dest), force=True)
+        ingest_policy(str(dest), chroma_client=chroma_client, embed_model=embed_model, force=True)
         saved.append(f.filename)
 
     return {"ingested": saved, "count": len(saved)}
@@ -118,13 +132,25 @@ async def review_contract(contract: UploadFile = File(...)):
 
         parser       = ContractParser()
         masker       = PIIMasker()
-        retriever    = HybridRetriever()
-        parent_child = ParentChildRetriever()
-        extractor    = EvidenceExtractor(llm)
-        graph        = build_graph()
 
         clauses = parser.parse_contract(str(tmp_path))
         clauses = masker.mask_clauses(clauses)
+
+        # Detect the correct policy collection for this contract
+        collection_names = list_policy_collections(chroma_client)
+        selected = detect_policy_collection(clauses, collection_names, llm)
+        collection = chroma_client.get_collection(selected)
+
+        # Scope retriever and parent child retriever instances to this collection
+        parent_child = ParentChildRetriever(collection=collection)
+        retriever = HybridRetriever(
+            collection=collection,
+            bm25_corpus=build_bm25_corpus(collection),
+            reranker=reranker,
+            llm=llm
+        )
+        extractor    = EvidenceExtractor(llm)
+        graph        = build_graph()
 
         results = [None] * len(clauses)
 

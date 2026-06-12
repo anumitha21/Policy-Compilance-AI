@@ -2,12 +2,15 @@
 # main.py
 
 import os
+import sys
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 
-from ingestion.policy_ingester import PolicyIngester
+from ingestion.policy_ingester import ingest_all_policies, get_collection_name, ingest_policy
 from ingestion.contract_parser import ContractParser
 from preprocessing.pii_masker import PIIMasker
 from retrieval.hybrid_retriever import HybridRetriever
@@ -18,6 +21,9 @@ from agents.rewrite_agent import RewriteAgent
 from agents.validator_agent import ValidatorAgent
 from graph.pipeline import CompliancePipeline
 from models.schemas import ClauseReviewResult
+from chromadb import PersistentClient
+from sentence_transformers import SentenceTransformer, CrossEncoder
+from rank_bm25 import BM25Okapi
 
 
 # ==========================================
@@ -37,7 +43,7 @@ if not GROQ_API_KEY:
 
 
 # ==========================================
-# LLM
+# GLOBALS & LLM
 # ==========================================
 
 llm = ChatGroq(
@@ -46,21 +52,25 @@ llm = ChatGroq(
     api_key=GROQ_API_KEY,
 )
 
+chroma_client = PersistentClient(path="data/chroma")
+embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+
 
 # ==========================================
 # INGESTION
 # ==========================================
 
 def ingest_policies(
-    policy_paths: list[str]
+    policy_paths: list[str],
+    force: bool = False
 ):
-
-    ingester = PolicyIngester()
-
     for path in policy_paths:
-
-        ingester.ingest_policy(
-            path
+        ingest_policy(
+            path,
+            chroma_client=chroma_client,
+            embed_model=embed_model,
+            force=force
         )
 
 
@@ -237,7 +247,79 @@ def review_clause(
 
 
 # ==========================================
-# CONTRACT REVIEW  (Fix 5 — parallel)
+# POLICY SELECTION & BM25 UTILS
+# ==========================================
+
+def list_policy_collections(chroma_client) -> list[str]:
+    """
+    Returns all policy collection names currently in ChromaDB.
+    Filters to only collections starting with 'policy_' but not 'policy_chunks'.
+    """
+    return sorted([
+        c.name
+        for c in chroma_client.list_collections()
+        if c.name.startswith("policy_") and c.name != "policy_chunks"
+    ])
+
+
+def detect_policy_collection(clauses: list[dict],
+                              collection_names: list[str],
+                              llm) -> str:
+    """
+    Uses the LLM to select the most relevant policy collection
+    for this contract. Returns the collection name.
+    Falls back to the first available collection on any error.
+    """
+    if not collection_names:
+        raise ValueError("No policy collections found in ChromaDB.")
+
+    if len(collection_names) == 1:
+        print(f"[PIPELINE] Only one policy available: "
+              f"{collection_names[0]}")
+        return collection_names[0]
+
+    sample = "\n\n".join(
+        c["text"][:200] for c in clauses[:4]
+    )
+    options = "\n".join(f"- {n}" for n in collection_names)
+
+    prompt = (
+        "You are given sample clauses from a contract and a list "
+        "of available policy collections stored in a database.\n\n"
+        f"Contract sample:\n{sample}\n\n"
+        f"Available policy collections:\n{options}\n\n"
+        "Which single collection name is most relevant for "
+        "reviewing this contract?\n"
+        "Reply with ONLY the exact collection name from the list. "
+        "No explanation."
+    )
+
+    try:
+        result = llm.invoke(prompt).content.strip()
+        if result in collection_names:
+            print(f"[PIPELINE] Selected policy collection: {result}")
+            return result
+        print(f"[PIPELINE] LLM returned '{result}' - "
+              f"not recognised, using {collection_names[0]}")
+        return collection_names[0]
+    except Exception as e:
+        print(f"[PIPELINE] Collection detection failed: {e} "
+              f"- using {collection_names[0]}")
+        return collection_names[0]
+
+
+def build_bm25_corpus(collection) -> BM25Okapi:
+    """
+    Builds a fresh BM25 index from the selected collection only.
+    Ensures BM25 scoring is never influenced by other policies.
+    """
+    data = collection.get()
+    corpus = [doc.lower().split() for doc in data.get("documents", [])]
+    return BM25Okapi(corpus)
+
+
+# ==========================================
+# CONTRACT REVIEW
 # ==========================================
 
 def review_contract(
@@ -246,13 +328,27 @@ def review_contract(
 
     parser       = ContractParser()
     masker       = PIIMasker()
-    retriever    = HybridRetriever()
-    parent_child = ParentChildRetriever()
-    extractor    = EvidenceExtractor(llm)
     graph        = build_graph()
 
     clauses = parser.parse_contract(contract_pdf)
     clauses = masker.mask_clauses(clauses)
+
+    # Select correct policy collection — fresh every run
+    collection_names = list_policy_collections(chroma_client)
+    selected = detect_policy_collection(clauses, collection_names, llm)
+    collection = chroma_client.get_collection(selected)
+
+    # Scope parent child retriever to the selected collection
+    parent_child = ParentChildRetriever(collection=collection)
+    extractor    = EvidenceExtractor(llm)
+
+    # Build retriever scoped to this collection only
+    retriever = HybridRetriever(
+        collection=collection,
+        bm25_corpus=build_bm25_corpus(collection),
+        reranker=reranker,
+        llm=llm
+    )
 
     results  = [None] * len(clauses)
     MAX_WORKERS = 1  # sequential — avoids burst on 12k TPM free tier
@@ -260,6 +356,7 @@ def review_contract(
     def _run(idx_clause):
         idx, clause = idx_clause
         print(f"\nReviewing {clause['clause_id']}")
+        print(f"[RETRIEVAL] Using collection: {selected}")
         return idx, review_clause(clause, graph, retriever, parent_child, extractor)
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -280,26 +377,27 @@ def review_contract(
 
 if __name__ == "__main__":
 
-    POLICY_FILES = [
-        "policies/company_policy.pdf"
-    ]
+    force_ingest = "--force-ingest" in sys.argv
 
-    CONTRACT_FILE = (
-        "contracts/sample_contract.pdf"
+    # Ingest all PDFs in policies/ into separate collections
+    ingest_all_policies(
+        policy_dir="policies",
+        chroma_client=chroma_client,
+        embed_model=embed_model,
+        force=force_ingest
     )
 
-    ingest_policies(
-        POLICY_FILES
-    )
+    # Detect contract file from --review arg
+    if "--review" in sys.argv:
+        try:
+            idx = sys.argv.index("--review")
+            CONTRACT_FILE = sys.argv[idx + 1]
+        except (ValueError, IndexError):
+            CONTRACT_FILE = "contracts/sample_contract.pdf"
+    else:
+        CONTRACT_FILE = "contracts/sample_contract.pdf"
 
-    results = review_contract(
-        CONTRACT_FILE
-    )
+    results = review_contract(CONTRACT_FILE)
 
     for result in results:
-
-        print(
-            result.model_dump_json(
-                indent=2
-            )
-        )
+        print(result.model_dump_json(indent=2))

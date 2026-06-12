@@ -1,6 +1,7 @@
 # retrieval/hybrid_retriever.py
 
 import pickle
+import re
 
 from chromadb import PersistentClient
 
@@ -10,12 +11,20 @@ from sentence_transformers import (
 )
 
 
+def tokenize(text):
+    return re.findall(r'\b\w+\b', text.lower())
+
+
 class HybridRetriever:
 
     def __init__(
         self,
-        chroma_path: str = "data/chroma",
-        bm25_path: str = "data/bm25.pkl"
+        collection,
+        bm25_corpus,
+        reranker,
+        llm,
+        top_k=15,
+        top_n=10
     ):
 
         # ---------------------------------
@@ -30,37 +39,22 @@ class HybridRetriever:
         # Cross Encoder Reranker
         # ---------------------------------
 
-        self.reranker = CrossEncoder(
-            "cross-encoder/ms-marco-MiniLM-L-6-v2"
-        )
+        self.reranker = reranker
 
         # ---------------------------------
         # Chroma
         # ---------------------------------
 
-        client = PersistentClient(
-            path=chroma_path
-        )
-
-        self.collection = (
-            client.get_collection(
-                "policy_chunks"
-            )
-        )
+        self.collection = collection
 
         # ---------------------------------
         # BM25
         # ---------------------------------
 
-        with open(
-            bm25_path,
-            "rb"
-        ) as f:
-
-            bm25_data = pickle.load(f)
-
-        self.bm25 = bm25_data["bm25"]
-        self.corpus = bm25_data["corpus"]
+        self.bm25 = bm25_corpus
+        data = self.collection.get()
+        self.corpus = data.get("documents") or []
+        self.metadatas = data.get("metadatas") or []
 
     # ==================================================
     # SEMANTIC RETRIEVAL
@@ -117,7 +111,7 @@ class HybridRetriever:
     ):
 
         tokenized_query = (
-            query.split()
+            tokenize(query)
         )
 
         scores = self.bm25.get_scores(
@@ -143,7 +137,7 @@ class HybridRetriever:
                         self.corpus[idx],
 
                     "metadata":
-                        {}
+                        self.metadatas[idx] if idx < len(self.metadatas) else {}
                 }
             )
 

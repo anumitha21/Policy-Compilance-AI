@@ -2,329 +2,193 @@
 
 import re
 import uuid
-import pickle
 import pdfplumber
-
 from pathlib import Path
 
-from chromadb import PersistentClient
+def tokenize(text):
+    return re.findall(r'\b\w+\b', text.lower())
 
-from sentence_transformers import SentenceTransformer
+def get_collection_name(policy_filepath: str) -> str:
+    """
+    Derives a safe ChromaDB collection name from the policy filename.
+    company_policy.pdf  -> policy_company_policy
+    hr_policy.pdf       -> policy_hr_policy
+    Any new PDF         -> policy_<sanitised_stem>
+    """
+    stem = Path(policy_filepath).stem.lower()
+    safe = re.sub(r'[^a-z0-9]+', '_', stem).strip('_')
+    return f"policy_{safe}"
 
-from rank_bm25 import BM25Okapi
+def load_pdf(pdf_path: str) -> str:
+    pages = []
+    with pdfplumber.open(pdf_path) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text()
+            if text:
+                pages.append(text)
+    return "\n".join(pages)
 
+def hierarchical_chunk(text: str) -> list[dict]:
+    """
+    Preserve section boundaries. No arbitrary token splitting.
+    """
+    chunks = []
+    current_section = None
+    current_title = None
+    buffer = []
 
-class PolicyIngester:
+    section_pattern = re.compile(
+        r"^(\d+(\.\d+)*)\s+(.+)$",
+        re.MULTILINE
+    )
 
-    def __init__(
-        self,
-        chroma_path: str = "data/chroma"
-    ):
-
-        self.embedder = SentenceTransformer(
-            "all-MiniLM-L6-v2"
-        )
-
-        self.client = PersistentClient(
-            path=chroma_path
-        )
-
-        self.collection = (
-            self.client.get_or_create_collection(
-                name="policy_chunks"
-            )
-        )
-
-    # =====================================================
-    # PDF LOADING
-    # =====================================================
-
-    def load_pdf(
-        self,
-        pdf_path: str
-    ) -> str:
-
-        pages = []
-
-        with pdfplumber.open(pdf_path) as pdf:
-
-            for page in pdf.pages:
-
-                text = page.extract_text()
-
-                if text:
-                    pages.append(text)
-
-        return "\n".join(pages)
-
-    # =====================================================
-    # HIERARCHICAL CHUNKING
-    # =====================================================
-
-    def hierarchical_chunk(
-        self,
-        text: str
-    ) -> list[dict]:
-
-        """
-        Preserve section boundaries.
-
-        No arbitrary token splitting.
-        """
-
-        chunks = []
-
-        current_section = None
-        current_title = None
-
-        buffer = []
-
-        section_pattern = re.compile(
-            r"^(\d+(\.\d+)*)\s+(.+)$",
-            re.MULTILINE
-        )
-
-        lines = text.split("\n")
-
-        for line in lines:
-
-            match = section_pattern.match(
-                line.strip()
-            )
-
-            if match:
-
-                if buffer:
-
-                    chunks.append(
-                        {
-                            "chunk_id": str(uuid.uuid4()),
-                            "section_number":
-                                current_section,
-                            "title":
-                                current_title,
-                            "text":
-                                "\n".join(buffer)
-                        }
-                    )
-
-                current_section = (
-                    match.group(1)
-                )
-
-                current_title = (
-                    match.group(3)
-                )
-
-                buffer = [line]
-
-            else:
-                buffer.append(line)
-
-        if buffer:
-
-            chunks.append(
-                {
+    lines = text.split("\n")
+    for line in lines:
+        match = section_pattern.match(line.strip())
+        if match:
+            if buffer:
+                chunks.append({
                     "chunk_id": str(uuid.uuid4()),
-                    "section_number":
-                        current_section,
-                    "title":
-                        current_title,
-                    "text":
-                        "\n".join(buffer)
-                }
-            )
+                    "section_number": current_section,
+                    "title": current_title,
+                    "text": "\n".join(buffer)
+                })
+            current_section = match.group(1)
+            current_title = match.group(3)
+            buffer = [line]
+        else:
+            buffer.append(line)
 
-        return chunks
+    if buffer:
+        chunks.append({
+            "chunk_id": str(uuid.uuid4()),
+            "section_number": current_section,
+            "title": current_title,
+            "text": "\n".join(buffer)
+        })
 
-    # =====================================================
-    # CATEGORY DETECTION
-    # =====================================================
+    return chunks
 
-    def detect_category(
-        self,
-        title: str
-    ) -> str:
+def detect_category(title: str) -> str:
+    title = (title or "").lower()
+    mapping = {
+        "termination": "termination",
+        "liability": "liability",
+        "confidential": "confidentiality",
+        "privacy": "privacy",
+        "security": "security",
+        "data": "data_protection",
+        "payment": "payment",
+        "indemn": "indemnification"
+    }
+    for key, value in mapping.items():
+        if key in title:
+            return value
+    return "general"
 
-        title = (title or "").lower()
+def store_chunks(collection, embed_model, chunks: list[dict]):
+    documents = []
+    ids = []
+    metadatas = []
 
-        mapping = {
-            "termination":
-                "termination",
+    for chunk in chunks:
+        documents.append(chunk["text"])
+        ids.append(chunk["chunk_id"])
 
-            "liability":
-                "liability",
+        section_number = chunk.get("section_number") or ""
+        title = chunk.get("title") or ""
+        source = chunk.get("source") or ""
+        source_file = chunk.get("source_file") or ""
+        collection_name = chunk.get("collection") or ""
 
-            "confidential":
-                "confidentiality",
+        metadatas.append({
+            "section_number": section_number,
+            "title": title,
+            "category": detect_category(title),
+            "source": source,
+            "source_file": source_file,
+            "collection": collection_name
+        })
 
-            "privacy":
-                "privacy",
+    embeddings = embed_model.encode(
+        documents,
+        show_progress_bar=True
+    ).tolist()
 
-            "security":
-                "security",
+    collection.add(
+        ids=ids,
+        documents=documents,
+        embeddings=embeddings,
+        metadatas=metadatas
+    )
 
-            "data":
-                "data_protection",
+def ingest_policy(policy_filepath: str,
+                  chroma_client,
+                  embed_model,
+                  force: bool = False) -> str:
+    """
+    Ingests one policy PDF into its own ChromaDB collection.
+    Returns the collection name it was ingested into.
+    """
+    collection_name = get_collection_name(policy_filepath)
+    collection = chroma_client.get_or_create_collection(collection_name)
 
-            "payment":
-                "payment",
+    if collection.count() > 0 and not force:
+        print(f"[INGEST] Skipping {policy_filepath} "
+              f"- already in {collection_name} "
+              f"({collection.count()} chunks)")
+        return collection_name
 
-            "indemn":
-                "indemnification"
-        }
+    if force:
+        try:
+            chroma_client.delete_collection(collection_name)
+        except Exception:
+            pass
+        collection = chroma_client.get_or_create_collection(collection_name)
 
-        for key, value in mapping.items():
+    print(f"Ingesting policy: {policy_filepath}")
+    text = load_pdf(policy_filepath)
+    chunks = hierarchical_chunk(text)
 
-            if key in title:
-                return value
+    for chunk in chunks:
+        chunk["source"] = Path(policy_filepath).name
+        chunk["source_file"] = policy_filepath
+        chunk["collection"] = collection_name
 
-        return "general"
+    store_chunks(collection, embed_model, chunks)
 
-    # =====================================================
-    # CHROMA STORAGE
-    # =====================================================
+    print(f"[INGEST] {policy_filepath} -> {collection_name} ({len(chunks)} chunks)")
+    return collection_name
 
-    def store_chunks(
-        self,
-        chunks: list[dict]
-    ):
-
-        documents = []
-        ids = []
-        metadatas = []
-
-        for chunk in chunks:
-
-            documents.append(
-                chunk["text"]
-            )
-
-            ids.append(
-                chunk["chunk_id"]
-            )
-
-            section_number = chunk.get(
-                "section_number"
-            ) or ""
-            title = chunk.get(
-                "title"
-            ) or ""
-
-            metadatas.append(
-                {
-                    "section_number":
-                        section_number,
-
-                    "title":
-                        title,
-
-                    "category":
-                        self.detect_category(
-                            title
-                        )
-                }
-            )
-
-        embeddings = (
-            self.embedder.encode(
-                documents,
-                show_progress_bar=True
-            ).tolist()
+def ingest_all_policies(policy_dir: str,
+                        chroma_client,
+                        embed_model,
+                        force: bool = False) -> list[str]:
+    """
+    Ingests every PDF in policy_dir into its own collection.
+    Returns list of collection names.
+    """
+    policy_dir = Path(policy_dir)
+    pdfs = sorted(policy_dir.glob("*.pdf"))
+    if not pdfs:
+        raise FileNotFoundError(
+            f"No PDF files found in {policy_dir}"
         )
-
-        self.collection.add(
-            ids=ids,
-            documents=documents,
-            embeddings=embeddings,
-            metadatas=metadatas
+    collections = []
+    for pdf in pdfs:
+        name = ingest_policy(
+            str(pdf), chroma_client, embed_model, force
         )
+        collections.append(name)
+    return collections
 
-    # =====================================================
-    # BM25 INDEX
-    # =====================================================
+# For backwards compatibility
+class PolicyIngester:
+    def __init__(self, chroma_path: str = "data/chroma"):
+        from chromadb import PersistentClient
+        from sentence_transformers import SentenceTransformer
+        self.client = PersistentClient(path=chroma_path)
+        self.embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
-    def build_bm25(
-        self,
-        chunks: list[dict],
-        save_path="data/bm25.pkl"
-    ):
-
-        corpus = [
-            chunk["text"]
-            for chunk in chunks
-        ]
-
-        tokenized = [
-            doc.split()
-            for doc in corpus
-        ]
-
-        bm25 = BM25Okapi(
-            tokenized
-        )
-
-        Path(save_path).parent.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        with open(
-            save_path,
-            "wb"
-        ) as f:
-
-            pickle.dump(
-                {
-                    "bm25": bm25,
-                    "corpus": corpus
-                },
-                f
-            )
-
-        return bm25
-
-    # =====================================================
-    # MAIN INGESTION
-    # =====================================================
-
-    def ingest_policy(
-        self,
-        pdf_path: str,
-        force: bool = False
-    ):
-
-        # Fix 3 — skip re-ingestion if DB already populated
-        if self.collection.count() > 0 and not force:
-            print(
-                f"[INGEST] Skipping — "
-                f"{self.collection.count()} chunks already in DB. "
-                f"Pass force=True to re-ingest."
-            )
-            return []
-
-        print(f"Ingesting policy: {pdf_path}")
-
-        text = self.load_pdf(
-            pdf_path
-        )
-
-        chunks = (
-            self.hierarchical_chunk(
-                text
-            )
-        )
-
-        self.store_chunks(
-            chunks
-        )
-
-        self.build_bm25(
-            chunks
-        )
-
-        print(
-            f"Stored {len(chunks)} chunks"
-        )
-
-        return chunks
+    def ingest_policy(self, pdf_path: str, force: bool = False):
+        return ingest_policy(pdf_path, self.client, self.embedder, force)

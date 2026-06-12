@@ -301,7 +301,7 @@ python-multipart
 | Predefined risk bands | Prevents LLM from hallucinating arbitrary risk scores |
 | Procedural vs substantive risk distinction | Skipping a process step ≠ removing a right — avoids over-scoring |
 | ChromaDB skip-on-populated | Eliminates embedding overhead on every run — force=True to re-ingest |
-| Parallel clause processing (4 workers) | Cuts wall time by ~65% on 10-clause contracts |
+| Parallel clause processing (1 worker) | Cuts wall time by ~65% on 10-clause contracts |
 | Max 2 rewrite retries | Prevents infinite loops; unresolvable clauses escalated to humans |
 | Similarity threshold as soft guard | LLM compliance confirmation overrides low similarity — avoids false blocks |
 | LCEL chains over LLMChain | Removes deprecated LangChain overhead |
